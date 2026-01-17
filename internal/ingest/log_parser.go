@@ -2,8 +2,10 @@ package ingest
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -290,6 +292,12 @@ func (p *LogParser) scanableBytes(websiteID, logPath string) int64 {
 
 	currentSize := fileInfo.Size()
 	startOffset := p.determineStartOffset(websiteID, logPath, currentSize)
+	if isGzipFile(logPath) {
+		if startOffset < 0 {
+			return 0
+		}
+		return currentSize
+	}
 	if currentSize <= startOffset {
 		return 0
 	}
@@ -341,19 +349,70 @@ func (p *LogParser) scanSingleFile(
 	// 确定扫描起始位置
 	currentSize := fileInfo.Size()
 	startOffset := p.determineStartOffset(websiteID, logPath, currentSize)
+	isGzip := isGzipFile(logPath)
 
-	// 设置读取位置
-	_, err = file.Seek(startOffset, 0)
-	if err != nil {
-		logrus.Errorf("无法设置文件读取位置 %s: %v", logPath, err)
+	if startOffset < 0 {
 		return
 	}
 
+	if !isGzip && currentSize <= startOffset {
+		return
+	}
+
+	var (
+		reader io.Reader
+		closer io.Closer
+	)
+	if isGzip {
+		if _, err = file.Seek(0, 0); err != nil {
+			logrus.Errorf("无法设置文件读取位置 %s: %v", logPath, err)
+			return
+		}
+		gzReader, err := gzip.NewReader(file)
+		if err != nil {
+			logrus.Errorf("无法解析 gzip 日志文件 %s: %v", logPath, err)
+			return
+		}
+		if startOffset > 0 {
+			if err := skipReaderBytes(gzReader, startOffset); err != nil {
+				logrus.Warnf("跳过 gzip 历史内容失败，将重新解析文件 %s: %v", logPath, err)
+				gzReader.Close()
+				if _, err := file.Seek(0, 0); err != nil {
+					logrus.Errorf("无法重置 gzip 文件 %s: %v", logPath, err)
+					return
+				}
+				gzReader, err = gzip.NewReader(file)
+				if err != nil {
+					logrus.Errorf("无法重新解析 gzip 日志文件 %s: %v", logPath, err)
+					return
+				}
+				startOffset = 0
+			}
+		}
+		reader = gzReader
+		closer = gzReader
+	} else {
+		// 设置读取位置
+		_, err = file.Seek(startOffset, 0)
+		if err != nil {
+			logrus.Errorf("无法设置文件读取位置 %s: %v", logPath, err)
+			return
+		}
+		reader = file
+	}
+
 	// 读取并解析日志
-	entriesCount := p.parseLogLines(file, websiteID, parserResult)
+	entriesCount, bytesRead := p.parseLogLines(reader, websiteID, parserResult)
+	if closer != nil {
+		closer.Close()
+	}
 
 	// 更新文件状态
-	p.updateFileState(websiteID, logPath, currentSize)
+	if isGzip {
+		p.updateFileState(websiteID, logPath, currentSize, startOffset+bytesRead)
+	} else {
+		p.updateFileState(websiteID, logPath, currentSize, currentSize)
+	}
 
 	if entriesCount > 0 {
 		logrus.Infof("网站 %s 的日志文件 %s 扫描完成，解析了 %d 条记录",
@@ -363,7 +422,7 @@ func (p *LogParser) scanSingleFile(
 
 // updateFileState 更新文件状态
 func (p *LogParser) updateFileState(
-	websiteID string, filePath string, currentSize int64) {
+	websiteID string, filePath string, currentSize, lastOffset int64) {
 	state, ok := p.states[websiteID]
 	if !ok {
 		state = LogScanState{
@@ -376,7 +435,7 @@ func (p *LogParser) updateFileState(
 	}
 
 	fileState := FileState{
-		LastOffset: currentSize,
+		LastOffset: lastOffset,
 		LastSize:   currentSize,
 	}
 
@@ -413,13 +472,20 @@ func (p *LogParser) determineStartOffset(
 		return 0
 	}
 
+	if isGzipFile(filePath) {
+		if currentSize == fileState.LastSize {
+			return -1
+		}
+		return fileState.LastOffset
+	}
+
 	return fileState.LastOffset
 }
 
 // parseLogLines 解析日志行并返回解析的记录数
 func (p *LogParser) parseLogLines(
-	file *os.File, websiteID string, parserResult *ParserResult) int {
-	scanner := bufio.NewScanner(file)
+	reader io.Reader, websiteID string, parserResult *ParserResult) (int, int64) {
+	scanner := bufio.NewScanner(reader)
 	entriesCount := 0
 
 	// 批量插入相关
@@ -444,9 +510,12 @@ func (p *LogParser) parseLogLines(
 	// 逐行处理
 	const progressChunk = int64(64 * 1024)
 	var pendingBytes int64
+	var totalBytes int64
 	for scanner.Scan() {
 		line := scanner.Text()
-		pendingBytes += int64(len(line) + 1)
+		lineBytes := int64(len(line) + 1)
+		pendingBytes += lineBytes
+		totalBytes += lineBytes
 		if pendingBytes >= progressChunk {
 			addParsingProgress(pendingBytes)
 			pendingBytes = 0
@@ -474,7 +543,7 @@ func (p *LogParser) parseLogLines(
 		logrus.Errorf("扫描网站 %s 的文件时出错: %v", websiteID, err)
 	}
 
-	return entriesCount // 返回当前文件的日志条数
+	return entriesCount, totalBytes // 返回当前文件的日志条数
 }
 
 func (p *LogParser) fillBatchLocations(batch []store.NginxLogRecord) {
@@ -493,6 +562,18 @@ func (p *LogParser) fillBatchLocations(batch []store.NginxLogRecord) {
 			batch[i].GlobalLocation = "未知"
 		}
 	}
+}
+
+func isGzipFile(filePath string) bool {
+	return strings.HasSuffix(strings.ToLower(filePath), ".gz")
+}
+
+func skipReaderBytes(reader io.Reader, offset int64) error {
+	if offset <= 0 {
+		return nil
+	}
+	_, err := io.CopyN(io.Discard, reader, offset)
+	return err
 }
 
 // parseNginxLogLine 解析单行Nginx日志

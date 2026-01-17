@@ -1,0 +1,35 @@
+{
+  "websites": [
+    {
+      "name": "GZ Log Test",
+      "logPath": "var/log/gz-log-read-test/*.gz",
+      "domains": ["localhost"]
+    }
+  ],
+  "system": {
+    "logDestination": "file",
+    "taskInterval": "1m",
+    "logRetentionDays": 30,
+    "demoMode": false,
+    "accessKeys": []
+  },
+  "server": {
+    "Port": ":8089"
+  },
+  "pvFilter": {
+    "statusCodeInclude": [
+      200
+    ],
+    "excludePatterns": [
+      "favicon.ico$",
+      "robots.txt$",
+      "sitemap.xml$",
+      "^/health$",
+      "^/_(?:nuxt|next)/",
+      "rss.xml$",
+      "feed.xml$",
+      "atom.xml$"
+    ],
+    "excludeIPs": ["127.0.0.1", "::1", "10.10.0.1", "192.168.30.21"]
+  }
+}
