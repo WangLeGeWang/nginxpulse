@@ -19,6 +19,8 @@
   - [4) 单体部署（单进程）](#4-单体部署单进程)
   - [5) Makefile 常用命令](#5-makefile-常用命令)
 - [多个日志文件如何挂载？](#多个日志文件如何挂载)
+- [自定义日志格式](#自定义日志格式)
+- [Caddy 日志支持](#caddy-日志支持)
 - [访问密钥列表（ACCESS_KEYS）](#访问密钥列表access_keys)
 - [二次开发注意事项](#二次开发注意事项)
 - [目录结构与主要文件](#目录结构与主要文件)
@@ -264,6 +266,78 @@ volumes:
 {"logPath": "/share/log/nginx/access-*.log.gz"}
 ```
 项目内提供了 gzip 参考样例：`var/log/gz-log-read-test/`。
+
+## 自定义日志格式
+支持为每个网站单独配置日志格式，也可以指定日志类型 `logType`（默认 `nginx`，Caddy 见下节）。
+
+日志类型（`logType`）：
+- `nginx`（默认）：按 Nginx access log 解析（兼容默认 combined 格式）。
+
+**方式 A：logFormat（Nginx log_format 语法）**
+```json
+{
+  "name": "主站",
+  "logPath": "/share/log/nginx/access.log",
+  "logType": "nginx",
+  "logFormat": "$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\""
+}
+```
+
+当前支持的变量：
+`$remote_addr` `$remote_user` `$time_local` `$time_iso8601` `$request`
+`$request_method` `$request_uri` `$uri` `$status` `$body_bytes_sent` `$bytes_sent`
+`$http_referer` `$http_user_agent`
+
+**方式 B：logRegex（正则，命名分组）**
+```json
+{
+  "name": "主站",
+  "logPath": "/share/log/nginx/access.log",
+  "logType": "nginx",
+  "logRegex": "^(?P<ip>\\S+) - (?P<user>\\S+) \\[(?P<time>[^\\]]+)\\] \"(?P<request>[^\"]+)\" (?P<status>\\d+) (?P<bytes>\\d+) \"(?P<referer>[^\"]*)\" \"(?P<ua>[^\"]*)\"$"
+}
+```
+
+命名分组要求（至少包含）：
+- IP：`ip` / `remote_addr`
+- 时间：`time` / `time_local` / `time_iso8601`
+- 状态码：`status`
+- URL：`url` / `request_uri` / `uri` 或 `request`（会从 request 中拆 method + url）
+
+可选时间解析格式（Go time layout）：
+```json
+{
+  "timeLayout": "2006-01-02T15:04:05+08:00"
+}
+```
+未配置时会自动尝试默认格式（`time_local`）、RFC3339/RFC3339Nano，以及时间戳（秒/毫秒）。
+
+## Caddy 日志支持
+支持 Caddy 默认 JSON access log（每行一条 JSON）。
+
+示例配置：
+```json
+{
+  "name": "Caddy 站点",
+  "logPath": "/share/log/caddy/access.log",
+  "logType": "caddy"
+}
+```
+
+示例日志格式（单行 JSON）：
+```json
+{"ts":1705567800.123,"level":"info","logger":"http.log.access","msg":"handled request","request":{"remote_ip":"203.0.113.10","method":"GET","uri":"/","headers":{"User-Agent":["Mozilla/5.0"],"Referer":["-"]}},"status":200,"size":1234}
+```
+
+解析字段说明：
+- 时间：`ts` / `time` / `timestamp`（支持秒/毫秒或 RFC3339 字符串）
+- IP：`request.remote_ip` / `request.client_ip`
+- 方法与路径：`request.method` + `request.uri`
+- 状态码：`status`
+- 大小：`size`（可选）
+- UA/Referer：`request.headers.User-Agent` / `request.headers.Referer`（可选）
+
+项目内示例文件：`var/log/nginx-pulse-demo/access_caddy.json`。
 
 ## 访问密钥列表（ACCESS_KEYS）
 当 `accessKeys` 配置为非空数组时，访问 UI 和 API 都需要提供密钥。默认值为空数组

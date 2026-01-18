@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -22,10 +23,29 @@ import (
 )
 
 var (
-	nginxLogPattern = regexp.MustCompile(`^(\S+) - (\S+) \[([^\]]+)\] "(\S+) ([^"]+) HTTP\/\d\.\d" (\d+) (\d+) "([^"]*)" "([^"]*)"`)
+	defaultNginxLogRegex = `^(?P<ip>\S+) - (?P<user>\S+) \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<url>[^"]+) HTTP/\d\.\d" (?P<status>\d+) (?P<bytes>\d+) "(?P<referer>[^"]*)" "(?P<ua>[^"]*)"`
 	lastCleanupDate = ""
 	ipParsingMu     sync.RWMutex
 	ipParsing       bool
+)
+
+const defaultNginxTimeLayout = "02/Jan/2006:15:04:05 -0700"
+
+const (
+	parseTypeRegex     = "regex"
+	parseTypeCaddyJSON = "caddy_json"
+)
+
+var (
+	ipAliases        = []string{"ip", "remote_addr", "client_ip"}
+	timeAliases      = []string{"time", "time_local", "time_iso8601"}
+	methodAliases    = []string{"method", "request_method"}
+	urlAliases       = []string{"url", "request_uri", "uri", "path"}
+	statusAliases    = []string{"status"}
+	bytesAliases     = []string{"bytes", "body_bytes_sent", "bytes_sent"}
+	refererAliases   = []string{"referer", "http_referer"}
+	userAgentAliases = []string{"ua", "user_agent", "http_user_agent"}
+	requestAliases   = []string{"request", "request_line"}
 )
 
 var ErrParsingInProgress = errors.New("日志解析中，请稍后重试")
@@ -49,12 +69,21 @@ type FileState struct {
 	LastSize   int64 `json:"last_size"`
 }
 
+type logLineParser struct {
+	regex      *regexp.Regexp
+	indexMap   map[string]int
+	timeLayout string
+	source     string
+	parseType  string
+}
+
 type LogParser struct {
 	repo          *store.Repository
 	statePath     string
 	states        map[string]LogScanState // 各网站的扫描状态，以网站ID为键
 	demoMode      bool
 	retentionDays int
+	lineParsers   map[string]*logLineParser
 }
 
 // NewLogParser 创建新的日志解析器
@@ -71,6 +100,7 @@ func NewLogParser(userRepoPtr *store.Repository) *LogParser {
 		states:        make(map[string]LogScanState),
 		demoMode:      cfg.System.DemoMode,
 		retentionDays: retentionDays,
+		lineParsers:   make(map[string]*logLineParser),
 	}
 	parser.loadState()
 	enrich.InitPVFilters()
@@ -226,6 +256,12 @@ func (p *LogParser) scanNginxLogsInternal(websiteIDs []string) []ParserResult {
 
 		website, _ := config.GetWebsiteByID(id)
 		parserResult := EmptyParserResult(website.Name, id)
+		if _, err := p.getLineParser(id); err != nil {
+			parserResult.Success = false
+			parserResult.Error = err
+			parserResults[i] = parserResult
+			continue
+		}
 
 		logPath := website.LogPath
 		if strings.Contains(logPath, "*") {
@@ -521,7 +557,7 @@ func (p *LogParser) parseLogLines(
 			pendingBytes = 0
 		}
 
-		entry, err := p.parseNginxLogLine(line)
+		entry, err := p.parseLogLine(websiteID, line)
 		if err != nil {
 			continue
 		}
@@ -576,17 +612,307 @@ func skipReaderBytes(reader io.Reader, offset int64) error {
 	return err
 }
 
-// parseNginxLogLine 解析单行Nginx日志
-func (p *LogParser) parseNginxLogLine(line string) (*store.NginxLogRecord, error) {
-	matches := nginxLogPattern.FindStringSubmatch(line)
+func (p *LogParser) getLineParser(websiteID string) (*logLineParser, error) {
+	if parser, ok := p.lineParsers[websiteID]; ok {
+		return parser, nil
+	}
 
-	if len(matches) < 10 {
+	website, ok := config.GetWebsiteByID(websiteID)
+	if !ok {
+		return nil, fmt.Errorf("未找到网站配置: %s", websiteID)
+	}
+
+	parser, err := newLogLineParser(website)
+	if err != nil {
+		return nil, err
+	}
+
+	p.lineParsers[websiteID] = parser
+	return parser, nil
+}
+
+func newLogLineParser(website config.WebsiteConfig) (*logLineParser, error) {
+	logType := strings.ToLower(strings.TrimSpace(website.LogType))
+	if logType == "" {
+		logType = "nginx"
+	}
+
+	pattern := defaultNginxLogRegex
+	source := "default"
+	parseType := parseTypeRegex
+
+	if strings.TrimSpace(website.LogRegex) != "" {
+		pattern = ensureAnchors(website.LogRegex)
+		source = "logRegex"
+	} else if strings.TrimSpace(website.LogFormat) != "" {
+		compiled, err := buildRegexFromFormat(website.LogFormat)
+		if err != nil {
+			return nil, err
+		}
+		pattern = compiled
+		source = "logFormat"
+	} else if logType == "caddy" {
+		return &logLineParser{
+			timeLayout: website.TimeLayout,
+			source:     "caddy",
+			parseType:  parseTypeCaddyJSON,
+		}, nil
+	} else if logType != "nginx" {
+		return nil, fmt.Errorf("不支持的日志类型: %s", logType)
+	}
+
+	regex, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("日志格式正则无效 (%s): %w", source, err)
+	}
+
+	indexMap := make(map[string]int)
+	for i, name := range regex.SubexpNames() {
+		if name != "" {
+			indexMap[name] = i
+		}
+	}
+
+	if err := validateLogPattern(indexMap); err != nil {
+		return nil, err
+	}
+
+	return &logLineParser{
+		regex:      regex,
+		indexMap:   indexMap,
+		timeLayout: website.TimeLayout,
+		source:     source,
+		parseType:  parseType,
+	}, nil
+}
+
+func ensureAnchors(pattern string) string {
+	trimmed := strings.TrimSpace(pattern)
+	if trimmed == "" {
+		return trimmed
+	}
+	if !strings.HasPrefix(trimmed, "^") {
+		trimmed = "^" + trimmed
+	}
+	if !strings.HasSuffix(trimmed, "$") {
+		trimmed = trimmed + "$"
+	}
+	return trimmed
+}
+
+func buildRegexFromFormat(format string) (string, error) {
+	if strings.TrimSpace(format) == "" {
+		return "", errors.New("logFormat 不能为空")
+	}
+
+	varPattern := regexp.MustCompile(`\$\w+`)
+	locations := varPattern.FindAllStringIndex(format, -1)
+	if len(locations) == 0 {
+		return "", errors.New("logFormat 未包含任何变量")
+	}
+
+	var builder strings.Builder
+	usedNames := make(map[string]bool)
+	last := 0
+	for _, loc := range locations {
+		literal := format[last:loc[0]]
+		builder.WriteString(regexp.QuoteMeta(literal))
+
+		varName := format[loc[0]+1 : loc[1]]
+		builder.WriteString(tokenRegexForVar(varName, usedNames))
+		last = loc[1]
+	}
+	builder.WriteString(regexp.QuoteMeta(format[last:]))
+
+	return "^" + builder.String() + "$", nil
+}
+
+func tokenRegexForVar(name string, used map[string]bool) string {
+	addGroup := func(group, pattern string) string {
+		if used[group] {
+			return pattern
+		}
+		used[group] = true
+		return "(?P<" + group + ">" + pattern + ")"
+	}
+
+	switch name {
+	case "remote_addr":
+		return addGroup("ip", `\S+`)
+	case "remote_user":
+		return addGroup("user", `\S+`)
+	case "time_local":
+		return addGroup("time", `[^]]+`)
+	case "time_iso8601":
+		return addGroup("time", `\S+`)
+	case "request":
+		return addGroup("request", `[^"]+`)
+	case "request_method":
+		return addGroup("method", `\S+`)
+	case "request_uri", "uri":
+		return addGroup("url", `\S+`)
+	case "status":
+		return addGroup("status", `\d{3}`)
+	case "body_bytes_sent", "bytes_sent":
+		return addGroup("bytes", `\d+`)
+	case "http_referer":
+		return addGroup("referer", `[^"]*`)
+	case "http_user_agent":
+		return addGroup("ua", `[^"]*`)
+	default:
+		return `\S+`
+	}
+}
+
+func validateLogPattern(indexMap map[string]int) error {
+	if len(indexMap) == 0 {
+		return errors.New("logRegex/logFormat 必须包含命名分组")
+	}
+
+	if !hasAnyField(indexMap, ipAliases) {
+		return errors.New("日志格式缺少 IP 字段（ip/remote_addr）")
+	}
+	if !hasAnyField(indexMap, timeAliases) {
+		return errors.New("日志格式缺少时间字段（time/time_local/time_iso8601）")
+	}
+	if !hasAnyField(indexMap, statusAliases) {
+		return errors.New("日志格式缺少状态码字段（status）")
+	}
+	if !hasAnyField(indexMap, urlAliases) && !hasAnyField(indexMap, requestAliases) {
+		return errors.New("日志格式缺少 URL 字段（url/request_uri 或 request）")
+	}
+	return nil
+}
+
+func hasAnyField(indexMap map[string]int, aliases []string) bool {
+	for _, name := range aliases {
+		if _, ok := indexMap[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// parseLogLine 解析单行日志
+func (p *LogParser) parseLogLine(websiteID string, line string) (*store.NginxLogRecord, error) {
+	parser, err := p.getLineParser(websiteID)
+	if err != nil {
+		return nil, err
+	}
+
+	switch parser.parseType {
+	case parseTypeCaddyJSON:
+		return p.parseCaddyJSONLine(line, parser)
+	default:
+		return p.parseRegexLogLine(parser, line)
+	}
+}
+
+func (p *LogParser) parseRegexLogLine(parser *logLineParser, line string) (*store.NginxLogRecord, error) {
+	matches := parser.regex.FindStringSubmatch(line)
+	if len(matches) == 0 {
 		return nil, errors.New("日志格式不匹配")
 	}
 
-	timestamp, err := time.Parse("02/Jan/2006:15:04:05 -0700", matches[3])
+	ip := extractField(matches, parser.indexMap, ipAliases)
+	rawTime := extractField(matches, parser.indexMap, timeAliases)
+	statusStr := extractField(matches, parser.indexMap, statusAliases)
+	urlValue := extractField(matches, parser.indexMap, urlAliases)
+	method := extractField(matches, parser.indexMap, methodAliases)
+	requestLine := extractField(matches, parser.indexMap, requestAliases)
+
+	if method == "" || urlValue == "" {
+		if requestLine != "" {
+			parsedMethod, parsedURL, err := parseRequestLine(requestLine)
+			if err != nil {
+				return nil, err
+			}
+			if method == "" {
+				method = parsedMethod
+			}
+			if urlValue == "" {
+				urlValue = parsedURL
+			}
+		}
+	}
+
+	if ip == "" || rawTime == "" || statusStr == "" || urlValue == "" {
+		return nil, errors.New("日志缺少必要字段")
+	}
+
+	timestamp, err := parseLogTime(rawTime, parser.timeLayout)
 	if err != nil {
 		return nil, err
+	}
+
+	statusCode, err := strconv.Atoi(statusStr)
+	if err != nil {
+		return nil, err
+	}
+
+	bytesSent := 0
+	bytesStr := extractField(matches, parser.indexMap, bytesAliases)
+	if bytesStr != "" && bytesStr != "-" {
+		if parsed, err := strconv.Atoi(bytesStr); err == nil {
+			bytesSent = parsed
+		}
+	}
+
+	referPath := extractField(matches, parser.indexMap, refererAliases)
+
+	userAgent := extractField(matches, parser.indexMap, userAgentAliases)
+	return p.buildLogRecord(ip, method, urlValue, referPath, userAgent, statusCode, bytesSent, timestamp)
+}
+
+func (p *LogParser) parseCaddyJSONLine(line string, parser *logLineParser) (*store.NginxLogRecord, error) {
+	decoder := json.NewDecoder(strings.NewReader(line))
+	decoder.UseNumber()
+
+	var payload map[string]interface{}
+	if err := decoder.Decode(&payload); err != nil {
+		return nil, err
+	}
+
+	request := getMap(payload, "request")
+	headers := getMap(request, "headers")
+
+	ip := getString(request, "remote_ip")
+	if ip == "" {
+		ip = getString(request, "client_ip")
+	}
+	if ip == "" {
+		ip = getString(payload, "remote_ip")
+	}
+
+	method := getString(request, "method")
+	urlValue := getString(request, "uri")
+
+	statusCode, ok := getInt(payload, "status")
+	if !ok {
+		return nil, errors.New("日志缺少状态码")
+	}
+
+	bytesSent, _ := getInt(payload, "size")
+	referPath := getHeader(headers, "Referer")
+	userAgent := getHeader(headers, "User-Agent")
+
+	timestamp, err := parseCaddyTime(payload, parser.timeLayout)
+	if err != nil {
+		return nil, err
+	}
+
+	return p.buildLogRecord(ip, method, urlValue, referPath, userAgent, statusCode, bytesSent, timestamp)
+}
+
+func (p *LogParser) buildLogRecord(
+	ip, method, urlValue, referer, userAgent string,
+	statusCode, bytesSent int, timestamp time.Time) (*store.NginxLogRecord, error) {
+
+	if ip == "" || method == "" || urlValue == "" {
+		return nil, errors.New("日志缺少必要字段")
+	}
+	if statusCode <= 0 {
+		return nil, errors.New("日志缺少状态码")
 	}
 
 	cutoffTime := time.Now().AddDate(0, 0, -p.retentionDays)
@@ -594,26 +920,31 @@ func (p *LogParser) parseNginxLogLine(line string) (*store.NginxLogRecord, error
 		return nil, errors.New("日志超过保留天数")
 	}
 
-	decodedPath, err := url.QueryUnescape(matches[5])
+	decodedPath, err := url.QueryUnescape(urlValue)
 	if err != nil {
-		decodedPath = matches[5]
-	}
-	statusCode, _ := strconv.Atoi(matches[6])
-	bytesSent, _ := strconv.Atoi(matches[7])
-	referPath, err := url.QueryUnescape(matches[8])
-	if err != nil {
-		referPath = matches[8]
+		decodedPath = urlValue
 	}
 
-	pageviewFlag := enrich.ShouldCountAsPageView(statusCode, decodedPath, matches[1])
-	browser, os, device := enrich.ParseUserAgent(matches[9])
+	referPath := referer
+	if referPath != "" {
+		if decodedRefer, err := url.QueryUnescape(referPath); err == nil {
+			referPath = decodedRefer
+		}
+	}
+
+	if userAgent == "" {
+		userAgent = "-"
+	}
+
+	pageviewFlag := enrich.ShouldCountAsPageView(statusCode, decodedPath, ip)
+	browser, os, device := enrich.ParseUserAgent(userAgent)
 
 	return &store.NginxLogRecord{
 		ID:               0,
-		IP:               matches[1],
+		IP:               ip,
 		PageviewFlag:     pageviewFlag,
 		Timestamp:        timestamp,
-		Method:           matches[4],
+		Method:           method,
 		Url:              decodedPath,
 		Status:           statusCode,
 		BytesSent:        bytesSent,
@@ -624,6 +955,218 @@ func (p *LogParser) parseNginxLogLine(line string) (*store.NginxLogRecord, error
 		DomesticLocation: "",
 		GlobalLocation:   "",
 	}, nil
+}
+
+func getMap(source map[string]interface{}, key string) map[string]interface{} {
+	if source == nil {
+		return nil
+	}
+	value, ok := source[key]
+	if !ok {
+		return nil
+	}
+	if mapped, ok := value.(map[string]interface{}); ok {
+		return mapped
+	}
+	return nil
+}
+
+func getString(source map[string]interface{}, key string) string {
+	if source == nil {
+		return ""
+	}
+	value, ok := source[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case json.Number:
+		return typed.String()
+	default:
+		return fmt.Sprint(typed)
+	}
+}
+
+func getInt(source map[string]interface{}, key string) (int, bool) {
+	if source == nil {
+		return 0, false
+	}
+	value, ok := source[key]
+	if !ok || value == nil {
+		return 0, false
+	}
+	switch typed := value.(type) {
+	case json.Number:
+		if parsed, err := typed.Int64(); err == nil {
+			return int(parsed), true
+		}
+		if parsed, err := typed.Float64(); err == nil {
+			return int(parsed), true
+		}
+	case float64:
+		return int(typed), true
+	case float32:
+		return int(typed), true
+	case int:
+		return typed, true
+	case int64:
+		return int(typed), true
+	case string:
+		if parsed, err := strconv.Atoi(typed); err == nil {
+			return parsed, true
+		}
+	}
+	return 0, false
+}
+
+func getHeader(headers map[string]interface{}, name string) string {
+	if headers == nil {
+		return ""
+	}
+	for key, value := range headers {
+		if strings.EqualFold(key, name) {
+			switch typed := value.(type) {
+			case []interface{}:
+				if len(typed) > 0 {
+					return fmt.Sprint(typed[0])
+				}
+			case []string:
+				if len(typed) > 0 {
+					return typed[0]
+				}
+			case string:
+				return typed
+			default:
+				return fmt.Sprint(typed)
+			}
+		}
+	}
+	return ""
+}
+
+func parseCaddyTime(payload map[string]interface{}, layout string) (time.Time, error) {
+	if payload == nil {
+		return time.Time{}, errors.New("日志缺少时间字段")
+	}
+	if value, ok := payload["ts"]; ok {
+		if ts, err := parseAnyTime(value, layout); err == nil {
+			return ts, nil
+		}
+	}
+	if value, ok := payload["time"]; ok {
+		if ts, err := parseAnyTime(value, layout); err == nil {
+			return ts, nil
+		}
+	}
+	if value, ok := payload["timestamp"]; ok {
+		if ts, err := parseAnyTime(value, layout); err == nil {
+			return ts, nil
+		}
+	}
+	return time.Time{}, errors.New("日志缺少时间字段")
+}
+
+func parseAnyTime(value interface{}, layout string) (time.Time, error) {
+	switch typed := value.(type) {
+	case json.Number:
+		if parsed, err := typed.Int64(); err == nil {
+			return time.Unix(parsed, 0), nil
+		}
+		if parsed, err := typed.Float64(); err == nil {
+			return parseFloatEpoch(parsed), nil
+		}
+	case float64:
+		return parseFloatEpoch(typed), nil
+	case float32:
+		return parseFloatEpoch(float64(typed)), nil
+	case int:
+		return time.Unix(int64(typed), 0), nil
+	case int64:
+		return time.Unix(typed, 0), nil
+	case string:
+		return parseLogTime(typed, layout)
+	}
+	return time.Time{}, errors.New("时间格式不支持")
+}
+
+func parseFloatEpoch(value float64) time.Time {
+	if value > 1e12 {
+		value = value / 1000
+	}
+	sec := int64(value)
+	nsec := int64((value - float64(sec)) * float64(time.Second))
+	return time.Unix(sec, nsec)
+}
+
+func extractField(matches []string, indexMap map[string]int, aliases []string) string {
+	for _, name := range aliases {
+		if idx, ok := indexMap[name]; ok {
+			if idx > 0 && idx < len(matches) {
+				return matches[idx]
+			}
+		}
+	}
+	return ""
+}
+
+func parseRequestLine(line string) (string, string, error) {
+	parts := strings.Fields(line)
+	if len(parts) < 2 {
+		return "", "", errors.New("无效的 request 格式")
+	}
+	return parts[0], parts[1], nil
+}
+
+func parseLogTime(raw, layout string) (time.Time, error) {
+	if ts, ok := parseEpochTime(raw); ok {
+		return ts, nil
+	}
+
+	layouts := make([]string, 0, 3)
+	if layout != "" {
+		layouts = append(layouts, layout)
+	}
+	layouts = append(layouts, defaultNginxTimeLayout, time.RFC3339, time.RFC3339Nano)
+
+	var lastErr error
+	for _, l := range layouts {
+		parsed, err := time.Parse(l, raw)
+		if err == nil {
+			return parsed, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = errors.New("时间解析失败")
+	}
+	return time.Time{}, lastErr
+}
+
+func parseEpochTime(raw string) (time.Time, bool) {
+	if raw == "" {
+		return time.Time{}, false
+	}
+
+	for _, r := range raw {
+		if (r < '0' || r > '9') && r != '.' {
+			return time.Time{}, false
+		}
+	}
+
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+
+	if value > 1e12 {
+		value = value / 1000
+	}
+
+	sec := int64(value)
+	nsec := int64((value - float64(sec)) * float64(time.Second))
+	return time.Unix(sec, nsec), true
 }
 
 // EmptyParserResult 生成空结果

@@ -27,9 +27,13 @@ type Config struct {
 }
 
 type WebsiteConfig struct {
-	Name    string   `json:"name"`
-	LogPath string   `json:"logPath"`
-	Domains []string `json:"domains,omitempty"`
+	Name       string   `json:"name"`
+	LogPath    string   `json:"logPath"`
+	Domains    []string `json:"domains,omitempty"`
+	LogType    string   `json:"logType,omitempty"`
+	LogFormat  string   `json:"logFormat,omitempty"`
+	LogRegex   string   `json:"logRegex,omitempty"`
+	TimeLayout string   `json:"timeLayout,omitempty"`
 }
 
 type SystemConfig struct {
