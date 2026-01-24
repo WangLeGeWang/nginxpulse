@@ -1,5 +1,5 @@
 <template>
-  <div class="setup-page">
+  <div class="setup-page" :class="{ 'manage-mode': isManageMode }">
     <div v-if="loading" class="setup-loading">
       <div class="setup-loading-card">
         <div class="setup-loading-spinner" aria-hidden="true"></div>
@@ -17,7 +17,7 @@
     </div>
 
     <div v-else class="setup-surface">
-      <div class="setup-lang">
+      <div v-if="!isManageMode" class="setup-lang">
         <div class="sidebar-language-compact" role="group" :aria-label="t('app.sidebar.language')" :key="currentLocale">
           <button
             v-for="option in languageOptions"
@@ -36,7 +36,7 @@
       </div>
       <div class="setup-grid">
         <aside class="setup-rail">
-        <div class="setup-brand">
+        <div v-if="!isManageMode" class="setup-brand">
           <div class="brand-mark" aria-hidden="true">
             <span class="brand-initials">NP</span>
             <svg class="brand-pulse" viewBox="0 0 32 16" role="presentation" aria-hidden="true">
@@ -52,7 +52,7 @@
           </div>
           <div class="brand-text">
             <div class="brand-title">NginxPulse</div>
-            <div class="brand-sub">{{ t('setup.subtitle') }}</div>
+            <div class="brand-sub">{{ t(subtitleKey) }}</div>
           </div>
         </div>
         <ol class="setup-steps" role="list">
@@ -337,8 +337,8 @@
               </div>
 
               <div v-if="saveSuccess" class="setup-alert success">
-                <div class="setup-alert-title">{{ t('setup.actions.saved') }}</div>
-                <div class="setup-hint">{{ t('setup.restartDockerHint') }}</div>
+                <div class="setup-alert-title">{{ t(savedLabelKey) }}</div>
+                <div class="setup-hint">{{ t(restartHintKey) }}</div>
                 <div v-if="autoRefreshSeconds > 0" class="setup-hint">
                   {{ t('setup.autoRefreshHint', { seconds: autoRefreshSeconds }) }}
                 </div>
@@ -377,7 +377,7 @@
             :disabled="saving || configReadonly"
             @click="saveAll"
           >
-            {{ saving ? t('setup.actions.saving') : t('setup.actions.save') }}
+            {{ saving ? t('setup.actions.saving') : t(saveLabelKey) }}
           </button>
         </div>
         <div v-if="configReadonly" class="setup-readonly">
@@ -407,7 +407,23 @@ interface WebsiteDraft {
   sourcesJson: string;
 }
 
+const props = withDefaults(defineProps<{ mode?: 'setup' | 'manage' }>(), {
+  mode: 'setup',
+});
+
 const { t, locale } = useI18n({ useScope: 'global' });
+
+const isManageMode = computed(() => props.mode === 'manage');
+const subtitleKey = computed(() => (isManageMode.value ? 'setup.manageSubtitle' : 'setup.subtitle'));
+const saveLabelKey = computed(() =>
+  isManageMode.value ? 'setup.actions.saveManage' : 'setup.actions.save'
+);
+const savedLabelKey = computed(() =>
+  isManageMode.value ? 'setup.actions.savedManage' : 'setup.actions.saved'
+);
+const restartHintKey = computed(() =>
+  isManageMode.value ? 'setup.restartManageHint' : 'setup.restartDockerHint'
+);
 
 const languageOptions = computed(() => {
   const _locale = locale.value;

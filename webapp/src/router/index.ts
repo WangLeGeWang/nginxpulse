@@ -3,6 +3,7 @@ import OverviewPage from '@/pages/OverviewPage.vue';
 import DailyPage from '@/pages/DailyPage.vue';
 import RealtimePage from '@/pages/RealtimePage.vue';
 import LogsPage from '@/pages/LogsPage.vue';
+import SetupPage from '@/pages/SetupPage.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -45,6 +46,17 @@ const router = createRouter({
         sidebarLabelKey: 'app.menu.logs',
         sidebarHintKey: 'app.sidebar.logsHint',
         mainClass: 'logs-page',
+      },
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: SetupPage,
+      props: { mode: 'manage' },
+      meta: {
+        sidebarLabelKey: 'app.menu.setup',
+        sidebarHintKey: 'app.sidebar.setupHint',
+        mainClass: 'setup-route',
       },
     },
   ],

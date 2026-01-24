@@ -376,6 +376,10 @@ body.dark-mode .sidebar-footer {
     position: relative;
 }
 
+.main-content.setup-route {
+    padding: 0;
+}
+
 .main-content.logs-page {
     display: flex;
     flex-direction: column;
