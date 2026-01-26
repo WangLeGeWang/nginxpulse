@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/likaia/nginxpulse/internal/analytics"
 	"github.com/likaia/nginxpulse/internal/config"
+	"github.com/likaia/nginxpulse/internal/enrich"
 	"github.com/likaia/nginxpulse/internal/ingest"
 	"github.com/likaia/nginxpulse/internal/version"
 	"github.com/sirupsen/logrus"
@@ -209,6 +210,108 @@ func SetupRoutes(
 			}
 		}
 
+		statsFactory.ClearCache()
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+		})
+	})
+
+	router.GET("/api/ip-geo/anomaly", func(c *gin.Context) {
+		if statsFactory == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "统计模块暂不可用",
+			})
+			return
+		}
+		websiteID := strings.TrimSpace(c.Query("id"))
+		if websiteID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "站点不存在",
+			})
+			return
+		}
+		if _, ok := config.GetWebsiteByID(websiteID); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "站点不存在",
+			})
+			return
+		}
+		count, samples, err := statsFactory.Repo().DetectIPGeoAnomalies(websiteID, 5)
+		if err != nil {
+			logrus.WithError(err).Error("检测 IP 归属地异常失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("检测失败: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"has_issue": count > 0,
+			"count":     count,
+			"samples":   samples,
+		})
+	})
+
+	router.POST("/api/ip-geo/repair", func(c *gin.Context) {
+		if logParser == nil || statsFactory == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "初始化模式暂不支持日志解析",
+			})
+			return
+		}
+		type repairRequest struct {
+			ID string `json:"id"`
+		}
+		var req repairRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "请求参数错误",
+			})
+			return
+		}
+		websiteID := strings.TrimSpace(req.ID)
+		if websiteID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "站点不存在",
+			})
+			return
+		}
+		if _, ok := config.GetWebsiteByID(websiteID); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "站点不存在",
+			})
+			return
+		}
+
+		repo := statsFactory.Repo()
+		if err := repo.ClearIPGeoCache(); err != nil {
+			logrus.WithError(err).Error("清空 IP 归属地缓存失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("清空 IP 归属地缓存失败: %v", err),
+			})
+			return
+		}
+		if err := repo.ClearIPGeoPending(); err != nil {
+			logrus.WithError(err).Error("清空 IP 归属地待解析队列失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("清空 IP 归属地待解析队列失败: %v", err),
+			})
+			return
+		}
+		enrich.ResetIPGeoCache()
+
+		if err := logParser.TriggerReparse(websiteID); err != nil {
+			if errors.Is(err, ingest.ErrParsingInProgress) {
+				c.JSON(http.StatusConflict, gin.H{
+					"error": err.Error(),
+				})
+				return
+			}
+			logrus.WithError(err).Error("触发重新解析失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("重新解析失败: %v", err),
+			})
+			return
+		}
 		statsFactory.ClearCache()
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,

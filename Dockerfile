@@ -35,7 +35,9 @@ RUN apk add --no-cache su-exec \
     postgresql \
     postgresql-client \
     && addgroup -S nginxpulse \
-    && adduser -S nginxpulse -G nginxpulse
+    && adduser -S nginxpulse -G nginxpulse \
+    && mkdir -p /tmp \
+    && chmod 1777 /tmp
 
 COPY --from=backend-builder /out/nginxpulse /app/nginxpulse
 COPY entrypoint.sh /app/entrypoint.sh

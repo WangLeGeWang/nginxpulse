@@ -129,4 +129,10 @@ export interface RealtimeStats {
   locations: RealtimeSeriesItem[];
 }
 
+export interface IPGeoAnomalyResponse {
+  has_issue: boolean;
+  count: number;
+  samples?: string[];
+}
+
 export type ApiResponse<T> = T;

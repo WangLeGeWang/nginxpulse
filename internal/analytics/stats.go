@@ -91,6 +91,10 @@ func (f *StatsFactory) ClearCache() {
 	f.cache.Clear()
 }
 
+func (f *StatsFactory) Repo() *store.Repository {
+	return f.repo
+}
+
 // QueryStats 通过指定类型的管理器查询统计数据
 func (f *StatsFactory) QueryStats(managerType string, query StatsQuery) (StatsResult, error) {
 	// 获取对应的管理器

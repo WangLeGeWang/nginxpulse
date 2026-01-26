@@ -74,6 +74,13 @@ type ipAPIBatchResponse struct {
 	Query       string `json:"query"`
 }
 
+type ipRegionParts struct {
+	Country  string
+	Province string
+	City     string
+	ISP      string
+}
+
 // ExtractIPRegionDBs 从嵌入的文件系统中提取 IP2Region 数据库
 func ExtractIPRegionDBs() (string, string, error) {
 	// 确保数据目录存在
@@ -195,25 +202,37 @@ func GetIPLocation(ip string) (string, string, error) {
 		return "内网", "本地网络", nil
 	}
 
-	localDomestic, localGlobal, _, localErr := queryIPLocationLocalDetailed(ip, parsedIP)
+	localDomestic, localGlobal, localHasCity, localErr := queryIPLocationLocalDetailed(ip, parsedIP)
 	localUsable := localErr == nil && localDomestic != "" && localDomestic != "未知" && localGlobal != "" && localGlobal != "未知"
-	if localUsable {
+	if localUsable && localHasCity {
 		setCachedLocation(ip, localDomestic, localGlobal)
 		return localDomestic, localGlobal, nil
 	}
 
 	remoteDomestic, remoteGlobal, remoteErr := queryIPLocationRemote(ip)
+	if remoteErr == nil {
+		if remoteDomestic == "" {
+			remoteDomestic = "未知"
+		}
+		if remoteGlobal == "" {
+			remoteGlobal = "未知"
+		}
+		if remoteDomestic != "未知" && remoteGlobal != "未知" {
+			setCachedLocation(ip, remoteDomestic, remoteGlobal)
+			return remoteDomestic, remoteGlobal, nil
+		}
+	}
+
+	if localUsable {
+		setCachedLocation(ip, localDomestic, localGlobal)
+		return localDomestic, localGlobal, nil
+	}
+
 	if remoteErr != nil {
 		return "未知", "未知", remoteErr
 	}
-	if remoteDomestic == "" {
-		remoteDomestic = "未知"
-	}
-	if remoteGlobal == "" {
-		remoteGlobal = "未知"
-	}
-	setCachedLocation(ip, remoteDomestic, remoteGlobal)
-	return remoteDomestic, remoteGlobal, nil
+	setCachedLocation(ip, "未知", "未知")
+	return "未知", "未知", nil
 }
 
 // GetIPLocationBatch 批量获取 IP 的地理位置信息（优先本地）
@@ -238,6 +257,7 @@ func GetIPLocationBatch(ips []string) (map[string]IPLocation, error) {
 	}
 
 	toQuery := make([]string, 0, len(unique))
+	fallbacks := make(map[string]IPLocation, len(unique))
 	for _, ip := range unique {
 		if domestic, global, ok := getCachedLocation(ip); ok {
 			results[ip] = IPLocation{Domestic: domestic, Global: global, Source: "cache"}
@@ -263,11 +283,15 @@ func GetIPLocationBatch(ips []string) (map[string]IPLocation, error) {
 			continue
 		}
 
-		localDomestic, localGlobal, _, localErr := queryIPLocationLocalDetailed(ip, parsedIP)
-		if localErr == nil && localDomestic != "" && localDomestic != "未知" && localGlobal != "" && localGlobal != "未知" {
+		localDomestic, localGlobal, localHasCity, localErr := queryIPLocationLocalDetailed(ip, parsedIP)
+		localUsable := localErr == nil && localDomestic != "" && localDomestic != "未知" && localGlobal != "" && localGlobal != "未知"
+		if localUsable && localHasCity {
 			results[ip] = IPLocation{Domestic: localDomestic, Global: localGlobal, Source: "local"}
 			setCachedLocation(ip, localDomestic, localGlobal)
 			continue
+		}
+		if localUsable {
+			fallbacks[ip] = IPLocation{Domestic: localDomestic, Global: localGlobal, Source: "local"}
 		}
 		toQuery = append(toQuery, ip)
 	}
@@ -278,18 +302,25 @@ func GetIPLocationBatch(ips []string) (map[string]IPLocation, error) {
 
 	remoteResults, remoteErr := queryIPLocationRemoteBatch(toQuery)
 	for _, ip := range toQuery {
-		if entry, ok := remoteResults[ip]; ok && entry.Domestic != "" && entry.Domestic != "未知" {
+		if entry, ok := remoteResults[ip]; ok && entry.Domestic != "" && entry.Domestic != "未知" && entry.Global != "" && entry.Global != "未知" {
 			results[ip] = IPLocation{Domestic: entry.Domestic, Global: entry.Global, Source: "remote"}
 			setCachedLocation(ip, entry.Domestic, entry.Global)
 			continue
 		}
-
+		if fallback, ok := fallbacks[ip]; ok {
+			results[ip] = fallback
+			setCachedLocation(ip, fallback.Domestic, fallback.Global)
+			continue
+		}
 		if remoteErr == nil {
 			results[ip] = IPLocation{Domestic: "未知", Global: "未知", Source: "unknown"}
 			setCachedLocation(ip, "未知", "未知")
 		}
 	}
 
+	if len(results) > 0 {
+		return results, nil
+	}
 	return results, remoteErr
 }
 
@@ -364,10 +395,10 @@ func queryIPLocationLocalDetailed(ip string, parsedIP net.IP) (string, string, b
 	if err != nil {
 		return domestic, global, false, err
 	}
-	parts := splitRegion(region)
-	city := ""
-	if len(parts) > 3 {
-		city = strings.TrimSpace(parts[3])
+	parts := parseIPRegionParts(region)
+	city := removeSuffixes(strings.TrimSpace(parts.City))
+	if isISPLabel(city) {
+		city = ""
 	}
 	hasCity := city != "" && city != "0" && city != "未知"
 	return domestic, global, hasCity, nil
@@ -484,13 +515,16 @@ func queryIPLocationRemoteBatch(ips []string) (map[string]ipLocationCacheEntry, 
 // 解析 ip2region 返回的地区信息
 func parseIPRegion(region string) (string, string, error) {
 	// 返回格式: 国家|区域|省份|城市|ISP
-	parts := splitRegion(region)
+	parts := parseIPRegionParts(region)
 	var domestic, global string
 
 	// 国内
-	if parts[0] == "中国" {
-		province := removeSuffixes(parts[2])
-		city := removeSuffixes(parts[3])
+	if parts.Country == "中国" {
+		province := removeSuffixes(parts.Province)
+		city := removeSuffixes(parts.City)
+		if isISPLabel(city) {
+			city = ""
+		}
 		if province != "" && province != "0" {
 			if city != "" && city != "0" && city != province {
 				domestic = fmt.Sprintf("%s·%s", province, city)
@@ -502,15 +536,15 @@ func parseIPRegion(region string) (string, string, error) {
 		} else {
 			domestic = "中国"
 		}
-	} else if parts[0] == "0" || parts[0] == "" {
+	} else if parts.Country == "0" || parts.Country == "" {
 		domestic = "未知"
 	} else {
-		domestic = joinLocationParts(parts[0], parts[2], parts[3])
+		domestic = joinLocationParts(parts.Country, parts.Province, parts.City)
 	}
 
 	// 全球
-	if parts[0] != "0" && parts[0] != "" {
-		global = parts[0]
+	if parts.Country != "0" && parts.Country != "" {
+		global = parts.Country
 	} else {
 		global = "未知"
 	}
@@ -528,6 +562,33 @@ func splitRegion(region string) []string {
 	}
 
 	return parts
+}
+
+func parseIPRegionParts(region string) ipRegionParts {
+	parts := splitRegion(region)
+	country := strings.TrimSpace(parts[0])
+	p1 := strings.TrimSpace(parts[1])
+	p2 := strings.TrimSpace(parts[2])
+	p3 := strings.TrimSpace(parts[3])
+	p4 := strings.TrimSpace(parts[4])
+
+	result := ipRegionParts{Country: country}
+
+	switch {
+	case isISPLabel(p4):
+		result.Province = p2
+		result.City = p3
+		result.ISP = p4
+	case isISPLabel(p3) && !isISPLabel(p2):
+		result.Province = p1
+		result.City = p2
+		result.ISP = p3
+	default:
+		result.Province = p2
+		result.City = p3
+	}
+
+	return result
 }
 
 func formatDomesticLocation(country, countryCode, regionName, city string) string {
@@ -622,6 +683,13 @@ func setCachedLocation(ip, domestic, global string) {
 	}
 }
 
+// ResetIPGeoCache clears in-memory IP geo cache entries.
+func ResetIPGeoCache() {
+	ipGeoCacheMu.Lock()
+	defer ipGeoCacheMu.Unlock()
+	ipGeoCache = make(map[string]ipLocationCacheEntry)
+}
+
 // 是否是内网 IP
 func isPrivateIP(ip net.IP) bool {
 	if ip == nil {
@@ -671,4 +739,26 @@ func removeSuffixes(name string) string {
 		}
 	}
 	return name
+}
+
+func isISPLabel(value string) bool {
+	clean := strings.TrimSpace(value)
+	if clean == "" || clean == "0" || clean == "未知" {
+		return false
+	}
+	regionSuffixes := []string{"省", "市", "自治区", "地区", "盟", "州", "县", "区", "特别行政区"}
+	for _, suffix := range regionSuffixes {
+		if strings.HasSuffix(clean, suffix) {
+			return false
+		}
+	}
+	ispKeywords := []string{
+		"电信", "联通", "移动", "铁通", "广电", "网通", "教育网", "长城宽带", "有线", "鹏博士", "阿里",
+	}
+	for _, keyword := range ispKeywords {
+		if strings.Contains(clean, keyword) {
+			return true
+		}
+	}
+	return false
 }

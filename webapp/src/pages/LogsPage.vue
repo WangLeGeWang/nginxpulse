@@ -379,6 +379,32 @@
         </template>
       </template>
     </Dialog>
+
+    <Dialog
+      v-model:visible="ipGeoIssueVisible"
+      modal
+      :closable="false"
+      :dismissableMask="false"
+      class="reparse-dialog ip-geo-dialog"
+      :header="t('logs.ipGeoIssueTitle')"
+    >
+      <div class="reparse-dialog-body">
+        <p>{{ t('logs.ipGeoIssueBody', { name: currentWebsiteLabel, count: ipGeoIssueCount }) }}</p>
+        <ul v-if="ipGeoIssueSamples.length" class="ip-geo-samples">
+          <li v-for="sample in ipGeoIssueSamples" :key="sample">{{ sample }}</li>
+        </ul>
+        <p class="reparse-dialog-note">{{ t('logs.ipGeoIssueNote') }}</p>
+        <p v-if="ipGeoIssueError" class="reparse-dialog-error">{{ ipGeoIssueError }}</p>
+      </div>
+      <template #footer>
+        <Button
+          severity="danger"
+          :label="t('logs.ipGeoIssueConfirm')"
+          :loading="ipGeoIssueFixLoading"
+          @click="confirmIPGeoRepair"
+        />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -388,7 +414,15 @@ import { useI18n } from 'vue-i18n';
 import Dialog from 'primevue/dialog';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
-import { exportLogs, fetchLogs, fetchWebsites, reparseAllLogs, reparseLogs } from '@/api';
+import {
+  exportLogs,
+  fetchIPGeoAnomaly,
+  fetchLogs,
+  fetchWebsites,
+  reparseAllLogs,
+  reparseLogs,
+  repairIPGeoAnomaly,
+} from '@/api';
 import type { WebsiteInfo } from '@/api/types';
 import { formatTraffic, getUserPreference, saveUserPreference } from '@/utils';
 import { formatBrowserLabel, formatDeviceLabel, formatLocationLabel, formatOSLabel, formatRefererLabel } from '@/i18n/mappings';
@@ -442,6 +476,13 @@ const migrationDialogVisible = ref(false);
 const migrationLoading = ref(false);
 const migrationError = ref('');
 const exportLoading = ref(false);
+const ipGeoIssueVisible = ref(false);
+const ipGeoIssueLoading = ref(false);
+const ipGeoIssueFixLoading = ref(false);
+const ipGeoIssueError = ref('');
+const ipGeoIssueCount = ref(0);
+const ipGeoIssueSamples = ref<string[]>([]);
+const ipGeoIssueChecked = new Set<string>();
 const demoMode = inject<{ value: boolean } | null>('demoMode', null);
 const migrationRequired = inject<{ value: boolean } | null>('migrationRequired', null);
 const migrationAckKey = 'pgMigrationAck';
@@ -882,6 +923,7 @@ async function loadLogs() {
     rawLogs.value = result.logs || [];
     totalPages.value = result.pagination?.pages || 0;
     applyParsingStatus(result);
+    await checkIPGeoIssue();
   } catch (error) {
     console.error('加载日志失败:', error);
     rawLogs.value = [];
@@ -892,6 +934,30 @@ async function loadLogs() {
     parsingPendingProgress.value = null;
   } finally {
     loading.value = false;
+  }
+}
+
+async function checkIPGeoIssue() {
+  if (!currentWebsiteId.value || ipGeoIssueLoading.value || isDemoMode.value) {
+    return;
+  }
+  if (ipGeoIssueChecked.has(currentWebsiteId.value)) {
+    return;
+  }
+  ipGeoIssueLoading.value = true;
+  ipGeoIssueError.value = '';
+  try {
+    const result = await fetchIPGeoAnomaly(currentWebsiteId.value);
+    ipGeoIssueChecked.add(currentWebsiteId.value);
+    if (result?.has_issue) {
+      ipGeoIssueCount.value = result.count || 0;
+      ipGeoIssueSamples.value = result.samples || [];
+      ipGeoIssueVisible.value = true;
+    }
+  } catch (error) {
+    console.debug('检测 IP 归属地异常失败:', error);
+  } finally {
+    ipGeoIssueLoading.value = false;
   }
 }
 
@@ -1037,6 +1103,28 @@ async function confirmReparse() {
     }
   } finally {
     reparseLoading.value = false;
+  }
+}
+
+async function confirmIPGeoRepair() {
+  if (!currentWebsiteId.value || ipGeoIssueFixLoading.value) {
+    return;
+  }
+  ipGeoIssueFixLoading.value = true;
+  ipGeoIssueError.value = '';
+  try {
+    await repairIPGeoAnomaly(currentWebsiteId.value);
+    ipGeoIssueVisible.value = false;
+    currentPage.value = 1;
+    await loadLogs();
+  } catch (error) {
+    if (error instanceof Error) {
+      ipGeoIssueError.value = error.message;
+    } else {
+      ipGeoIssueError.value = t('logs.ipGeoIssueError');
+    }
+  } finally {
+    ipGeoIssueFixLoading.value = false;
   }
 }
 
@@ -1512,6 +1600,13 @@ function nextPage() {
 }
 
 .reparse-dialog-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ip-geo-samples {
+  margin: 6px 0;
+  padding-left: 18px;
   font-size: 13px;
   color: var(--muted);
 }

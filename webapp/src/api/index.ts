@@ -8,6 +8,7 @@ import type {
   ConfigSaveResponse,
   ConfigValidationResult,
   RealtimeStats,
+  IPGeoAnomalyResponse,
   SimpleSeriesStats,
   TimeSeriesStats,
   WebsiteInfo,
@@ -71,6 +72,19 @@ export const reparseAllLogs = async (): Promise<void> => {
   await client.post<ApiResponse<{ success: boolean }>>('/api/logs/reparse', {
     id: '',
     migration: true,
+  });
+};
+
+export const fetchIPGeoAnomaly = async (websiteId: string): Promise<IPGeoAnomalyResponse> => {
+  const response = await client.get<ApiResponse<IPGeoAnomalyResponse>>('/api/ip-geo/anomaly', {
+    params: buildParams({ id: websiteId }),
+  });
+  return response.data;
+};
+
+export const repairIPGeoAnomaly = async (websiteId: string): Promise<void> => {
+  await client.post<ApiResponse<{ success: boolean }>>('/api/ip-geo/repair', {
+    id: websiteId,
   });
 };
 
