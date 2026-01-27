@@ -199,14 +199,14 @@ PV_EXCLUDE_IPS='[]'
 通常是运行环境时区未同步导致。请确认 Docker/系统时区正确，并按“时区设置（重要）”章节调整后重新解析日志。
 
 4) 无法启动
-报错tmp目录无权限写入问题，如果容器启动后出现如下所示的报错，请在宿主机随便找个目录，挂载进去即可。
+报错 tmp 目录无权限写入问题（旧版本可能出现），如果容器启动后出现如下所示的报错，请确认 `nginxpulse_data` 可写，或设置 `TMPDIR` 到可写目录。
 ```bash
 nginxpulse: initializing postgres data dir at /app/var/pgdata
 /app/entrypoint.sh: line 91: can't create /tmp/tmp.KOdAPn: Permission denied
 ```
-解决办法：
+解决办法（任选其一）：
 ```bash
--v ./dockertmp:/tmp:rw 
+-e TMPDIR=/app/var/nginxpulse_data/tmp
 ```
 
 5) 初始化时报错日志无法访问

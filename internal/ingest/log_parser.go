@@ -1578,6 +1578,10 @@ func tokenRegexForVar(name string, used map[string]bool, quoted bool) string {
 		return addGroup("request_length", `\d+`)
 	case "remote_port":
 		return addGroup("remote_port", `\d+`)
+	case "connection":
+		return addGroup("connection", `\d+`)
+	case "request_time_msec":
+		return addGroup("request_time_msec", `\d+(?:\.\d+)?`)
 	case "upstream_addr":
 		return addGroup("upstream_addr", commaListPattern)
 	case "upstream_status":

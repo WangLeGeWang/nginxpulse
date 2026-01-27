@@ -3,6 +3,7 @@ set -e
 
 DATA_DIR="${DATA_DIR:-/app/var/nginxpulse_data}"
 PGDATA="${PGDATA:-/app/var/pgdata}"
+TMPDIR="${TMPDIR:-${DATA_DIR}/tmp}"
 POSTGRES_USER="${POSTGRES_USER:-nginxpulse}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-nginxpulse}"
 POSTGRES_DB="${POSTGRES_DB:-nginxpulse}"
@@ -39,7 +40,8 @@ if [ -n "$APP_UID" ]; then
   fi
 fi
 
-mkdir -p "$DATA_DIR" "$PGDATA"
+export TMPDIR
+mkdir -p "$DATA_DIR" "$PGDATA" "$TMPDIR"
 
 is_mount_point() {
   awk -v target="$1" '$2==target {found=1} END {exit found?0:1}' /proc/mounts
@@ -84,7 +86,7 @@ init_postgres() {
   fi
 
   echo "nginxpulse: initializing postgres data dir at $PGDATA"
-  PWFILE="$(mktemp)"
+  PWFILE="$(mktemp -p "$TMPDIR")"
   # Ensure the postgres user can read the password file created by root.
   chown "$APP_USER:$APP_GROUP" "$PWFILE" 2>/dev/null || true
   chmod 600 "$PWFILE" 2>/dev/null || true
