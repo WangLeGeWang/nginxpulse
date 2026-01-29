@@ -312,6 +312,8 @@ nginxpulse: initializing postgres data dir at /app/var/pgdata
   <img src="docs/thanks/supporter-1.png" width="60" height="60" alt="supporter-1" />
   <img src="docs/thanks/supporter-2.png" width="60" height="60" alt="supporter-2" />
   <img src="docs/thanks/supporter-3.png" width="60" height="60" alt="supporter-3" />
+  <img src="docs/thanks/supporter-4.png" width="60" height="60" alt="supporter-4" />
+  <img src="docs/thanks/supporter-5.png" width="60" height="60" alt="supporter-5" />
 </p>
 
 ## 写在最后
