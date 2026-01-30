@@ -154,9 +154,12 @@ func (p *LogParser) backfillPlainFile(
 		if len(batch) == 0 {
 			return
 		}
-		p.queueBatchIPGeo(batch)
+		// 先标记 location 为“待解析”，再在成功落库后写入 ip_geo_pending（避免竞态导致“待解析”长期不变）
+		p.markBatchIPGeoPending(batch)
 		if err := p.repo.BatchInsertLogsForWebsite(websiteID, batch); err != nil {
 			logrus.Errorf("批量插入网站 %s 的日志记录失败: %v", websiteID, err)
+		} else {
+			p.enqueueBatchIPGeo(batch)
 		}
 		batch = batch[:0]
 	}
