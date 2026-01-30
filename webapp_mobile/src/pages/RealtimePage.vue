@@ -75,7 +75,7 @@
           <div v-if="deviceRows.length === 0" class="list-empty">{{ t('realtime.noData') }}</div>
         </section>
 
-        <van-tabs v-model:active="activeTab" animated>
+        <van-tabs v-model:active="activeTab" animated class="mobile-tabs">
           <van-tab v-for="section in listSections" :key="section.key" :title="section.title">
             <section class="mobile-panel list-card">
               <van-cell-group inset>
@@ -86,7 +86,7 @@
                   <template #title>
                     <span class="list-title">
                       <span class="rank-badge">{{ index + 1 }}</span>
-                      <span>{{ item.name }}</span>
+                      <van-text-ellipsis class="list-label" :content="item.name" />
                     </span>
                   </template>
                   <template #value>

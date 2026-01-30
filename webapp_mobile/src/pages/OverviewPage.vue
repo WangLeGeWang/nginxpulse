@@ -83,7 +83,7 @@
               <template #title>
                 <span class="list-title">
                   <span class="rank-badge">{{ item.rank }}</span>
-                  <span>{{ item.label }}</span>
+                  <van-text-ellipsis class="list-label" :content="item.label" />
                 </span>
               </template>
             </van-cell>
@@ -104,7 +104,7 @@
               <template #title>
                 <span class="list-title">
                   <span class="rank-badge">{{ item.rank }}</span>
-                  <span>{{ item.label }}</span>
+                  <van-text-ellipsis class="list-label" :content="item.label" />
                 </span>
               </template>
             </van-cell>

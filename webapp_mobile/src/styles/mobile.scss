@@ -282,6 +282,73 @@ body.dark-mode .filter-trigger + .filter-trigger {
   color: var(--mobile-primary);
 }
 
+.mobile-tabs .van-tabs__wrap {
+  padding: 0;
+  margin-bottom: 12px;
+}
+
+.mobile-tabs {
+  background: var(--panel);
+  border-radius: var(--mobile-radius);
+  border: 1px solid var(--mobile-border);
+  padding: 12px;
+  box-shadow: var(--mobile-shadow-soft);
+}
+
+.mobile-tabs .van-tabs__nav {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--mobile-border);
+  border-radius: 16px;
+  padding: 4px;
+  box-shadow: var(--mobile-shadow-soft);
+  gap: 4px;
+}
+
+.mobile-tabs .van-tab {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mobile-muted);
+  padding: 6px 10px;
+  border-radius: 12px;
+}
+
+.mobile-tabs .van-tab--active {
+  color: var(--mobile-primary);
+  background: rgba(29, 107, 255, 0.14);
+}
+
+.mobile-tabs .van-tabs__line {
+  display: none;
+}
+
+body.dark-mode .mobile-tabs .van-tabs__nav {
+  background: rgba(17, 24, 39, 0.55);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+body.dark-mode .mobile-tabs .van-tab--active {
+  background: rgba(90, 162, 255, 0.18);
+}
+
+.mobile-tabs .van-tabs__content,
+.mobile-tabs .van-tabs__content--animated,
+.mobile-tabs .van-tab__pane {
+  background: transparent;
+  overflow: visible;
+}
+
+.mobile-tabs .list-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  overflow: visible;
+}
+
+.mobile-tabs .list-card::after {
+  display: none;
+}
+
 .van-progress {
   margin-top: 6px;
 }
@@ -467,6 +534,20 @@ body.dark-mode .metric-card {
   background: transparent;
 }
 
+.list-card .van-cell__title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.list-card .van-cell__value {
+  flex: 0 0 auto;
+  margin-left: 12px;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--mobile-muted);
+}
+
 .mobile-log-list .van-list {
   background: transparent;
 }
@@ -479,23 +560,37 @@ body.dark-mode .metric-card {
 }
 
 .rank-badge {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   background: rgba(29, 107, 255, 0.12);
   color: var(--mobile-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   margin-right: 8px;
+  flex: 0 0 28px;
+  font-variant-numeric: tabular-nums;
 }
 
 .list-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.list-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .inline-tags {
