@@ -136,6 +136,8 @@
 
     <van-action-sheet
       v-model:show="languageSheetVisible"
+      teleport="body"
+      :duration="ACTION_SHEET_DURATION"
       :actions="languageActions"
       :cancel-text="t('common.cancel')"
       close-on-click-action
@@ -150,6 +152,51 @@ import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { fetchAppStatus } from '@/api';
 import { getLocaleFromQuery, getStoredLocale, normalizeLocale, setLocale } from '@/i18n';
+import {
+  ACTION_SHEET_DURATION,
+  HERO_ACCENT_ALPHA,
+  HERO_ACCENT_ALPHA_DARK,
+  HERO_BORDER_ALPHA,
+  HERO_BORDER_ALPHA_DARK,
+  HERO_PRIMARY_ALPHA,
+  HERO_PRIMARY_ALPHA_DARK,
+  CARD_SHADOW_ALPHA,
+  CARD_SHADOW_ALPHA_DARK,
+  CARD_SHADOW_SOFT_ALPHA,
+  CARD_SHADOW_SOFT_ALPHA_DARK,
+  MOBILE_CARD_PADDING,
+  MOBILE_CARD_RADIUS,
+  MOBILE_GAP,
+  NAV_BLUR,
+  NAV_BG_ALPHA,
+  NAV_BG_ALPHA_DARK,
+  NAV_ICON_BG_ALPHA,
+  NAV_ICON_BG_ALPHA_DARK,
+  NAV_ICON_BLUR,
+  NAV_ICON_SHADOW_ALPHA,
+  NAV_SHADOW_ALPHA,
+  NAV_SHADOW_ALPHA_DARK,
+  METRIC_TINT_ALPHA,
+  METRIC_TINT_ALPHA_DARK,
+  PANEL_GLOW_ALPHA,
+  PANEL_TINT_ALPHA,
+  PANEL_TINT_ALPHA_DARK,
+  TABBAR_BLUR,
+  TABBAR_BG_ALPHA,
+  TABBAR_BG_ALPHA_DARK,
+  TABBAR_GUTTER,
+  TABBAR_INDICATOR_DURATION,
+  TABBAR_INDICATOR_EASING,
+  TABBAR_INDICATOR_INSET,
+  TABBAR_INDICATOR_RADIUS,
+  TABBAR_MARGIN_BOTTOM,
+  TABBAR_MAX_WIDTH,
+  TABBAR_PADDING_X,
+  TABBAR_PADDING_Y,
+  TABBAR_RADIUS,
+  TABBAR_SHADOW_ALPHA,
+  TABBAR_SHADOW_ALPHA_DARK,
+} from '@mobile/constants/ui';
 
 const route = useRoute();
 const { t, locale } = useI18n({ useScope: 'global' });
@@ -265,7 +312,54 @@ const toggleTheme = () => {
   isDark.value = !isDark.value;
 };
 
+const applyUiTokens = () => {
+  const root = document.documentElement;
+  root.style.setProperty('--nav-bg-alpha', String(NAV_BG_ALPHA));
+  root.style.setProperty('--nav-bg-alpha-dark', String(NAV_BG_ALPHA_DARK));
+  root.style.setProperty('--nav-icon-bg-alpha', String(NAV_ICON_BG_ALPHA));
+  root.style.setProperty('--nav-icon-bg-alpha-dark', String(NAV_ICON_BG_ALPHA_DARK));
+  root.style.setProperty('--nav-blur', `${NAV_BLUR}px`);
+  root.style.setProperty('--nav-shadow-alpha', String(NAV_SHADOW_ALPHA));
+  root.style.setProperty('--nav-shadow-alpha-dark', String(NAV_SHADOW_ALPHA_DARK));
+  root.style.setProperty('--nav-icon-shadow-alpha', String(NAV_ICON_SHADOW_ALPHA));
+  root.style.setProperty('--nav-icon-blur', `${NAV_ICON_BLUR}px`);
+  root.style.setProperty('--tabbar-bg-alpha', String(TABBAR_BG_ALPHA));
+  root.style.setProperty('--tabbar-bg-alpha-dark', String(TABBAR_BG_ALPHA_DARK));
+  root.style.setProperty('--tabbar-indicator-duration', `${TABBAR_INDICATOR_DURATION}s`);
+  root.style.setProperty('--tabbar-indicator-ease', TABBAR_INDICATOR_EASING);
+  root.style.setProperty('--tabbar-blur', `${TABBAR_BLUR}px`);
+  root.style.setProperty('--tabbar-radius', `${TABBAR_RADIUS}px`);
+  root.style.setProperty('--tabbar-margin-bottom', `${TABBAR_MARGIN_BOTTOM}px`);
+  root.style.setProperty('--tabbar-gutter', `${TABBAR_GUTTER}px`);
+  root.style.setProperty('--tabbar-max-width', `${TABBAR_MAX_WIDTH}px`);
+  root.style.setProperty('--tabbar-padding-x', `${TABBAR_PADDING_X}px`);
+  root.style.setProperty('--tabbar-padding-y', `${TABBAR_PADDING_Y}px`);
+  root.style.setProperty('--tabbar-shadow-alpha', String(TABBAR_SHADOW_ALPHA));
+  root.style.setProperty('--tabbar-shadow-alpha-dark', String(TABBAR_SHADOW_ALPHA_DARK));
+  root.style.setProperty('--tabbar-indicator-inset', `${TABBAR_INDICATOR_INSET}px`);
+  root.style.setProperty('--tabbar-indicator-radius', `${TABBAR_INDICATOR_RADIUS}px`);
+  root.style.setProperty('--mobile-gap', `${MOBILE_GAP}px`);
+  root.style.setProperty('--mobile-radius', `${MOBILE_CARD_RADIUS}px`);
+  root.style.setProperty('--mobile-card-padding', `${MOBILE_CARD_PADDING}px`);
+  root.style.setProperty('--hero-primary-alpha', String(HERO_PRIMARY_ALPHA));
+  root.style.setProperty('--hero-accent-alpha', String(HERO_ACCENT_ALPHA));
+  root.style.setProperty('--hero-border-alpha', String(HERO_BORDER_ALPHA));
+  root.style.setProperty('--hero-primary-alpha-dark', String(HERO_PRIMARY_ALPHA_DARK));
+  root.style.setProperty('--hero-accent-alpha-dark', String(HERO_ACCENT_ALPHA_DARK));
+  root.style.setProperty('--hero-border-alpha-dark', String(HERO_BORDER_ALPHA_DARK));
+  root.style.setProperty('--card-shadow-alpha', String(CARD_SHADOW_ALPHA));
+  root.style.setProperty('--card-shadow-alpha-dark', String(CARD_SHADOW_ALPHA_DARK));
+  root.style.setProperty('--card-shadow-soft-alpha', String(CARD_SHADOW_SOFT_ALPHA));
+  root.style.setProperty('--card-shadow-soft-alpha-dark', String(CARD_SHADOW_SOFT_ALPHA_DARK));
+  root.style.setProperty('--panel-tint-alpha', String(PANEL_TINT_ALPHA));
+  root.style.setProperty('--panel-tint-alpha-dark', String(PANEL_TINT_ALPHA_DARK));
+  root.style.setProperty('--panel-glow-alpha', String(PANEL_GLOW_ALPHA));
+  root.style.setProperty('--metric-tint-alpha', String(METRIC_TINT_ALPHA));
+  root.style.setProperty('--metric-tint-alpha-dark', String(METRIC_TINT_ALPHA_DARK));
+};
+
 onMounted(() => {
+  applyUiTokens();
   applyTheme(isDark.value);
   refreshAppStatus();
   window.addEventListener(ACCESS_KEY_EVENT, handleAccessKeyEvent);
@@ -372,19 +466,19 @@ function onSelectLanguage(action: { value?: string }) {
 
 <style lang="scss" scoped>
 .mobile-nav {
-  --van-nav-bar-background: rgba(255, 255, 255, 0.55);
+  --van-nav-bar-background: rgba(255, 255, 255, var(--nav-bg-alpha, 0.55));
   --van-nav-bar-title-text-color: #0f172a;
   --van-nav-bar-icon-color: #0f172a;
-  backdrop-filter: blur(18px);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(var(--nav-blur, 18px));
+  box-shadow: 0 8px 20px rgba(15, 23, 42, var(--nav-shadow-alpha, 0.08));
   border-bottom: 1px solid rgba(226, 232, 240, 0.5);
 }
 
 :global(body.dark-mode) .mobile-nav {
-  --van-nav-bar-background: rgba(15, 23, 42, 0.4);
+  --van-nav-bar-background: rgba(15, 23, 42, var(--nav-bg-alpha-dark, 0.4));
   --van-nav-bar-title-text-color: #f8fafc;
   --van-nav-bar-icon-color: #f8fafc;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, var(--nav-shadow-alpha-dark, 0.35));
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
@@ -415,10 +509,10 @@ function onSelectLanguage(action: { value?: string }) {
   min-width: 36px;
   height: 32px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, var(--nav-icon-bg-alpha, 0.55));
   border: 1px solid rgba(226, 232, 240, 0.6);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, var(--nav-icon-shadow-alpha, 0.12));
+  backdrop-filter: blur(var(--nav-icon-blur, 12px));
 }
 
 .nav-icon {

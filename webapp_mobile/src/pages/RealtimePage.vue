@@ -1,6 +1,6 @@
 <template>
   <div class="mobile-page">
-    <section class="mobile-panel">
+    <section class="mobile-panel has-dropdown">
       <div class="mobile-panel-header">
         <div>
           <div class="section-title">{{ t('realtime.title') }}</div>
@@ -10,10 +10,16 @@
           {{ t('common.refresh') }}
         </van-button>
       </div>
-      <van-dropdown-menu>
-        <van-dropdown-item v-model="currentWebsiteId" :options="websiteOptions" />
-        <van-dropdown-item v-model="windowMinutes" :options="windowOptions" />
-      </van-dropdown-menu>
+      <div class="filter-row">
+        <button type="button" class="filter-trigger" @click="websiteSheetVisible = true">
+          <span class="filter-value">{{ currentWebsiteLabel }}</span>
+          <van-icon name="arrow-down" />
+        </button>
+        <button type="button" class="filter-trigger" @click="windowSheetVisible = true">
+          <span class="filter-value">{{ currentWindowLabel }}</span>
+          <van-icon name="arrow-down" />
+        </button>
+      </div>
     </section>
 
     <van-empty v-if="!currentWebsiteId && !websitesLoading" :description="t('common.emptyWebsite')" />
@@ -97,6 +103,25 @@
         </van-tabs>
       </div>
     </div>
+
+    <van-action-sheet
+      v-model:show="websiteSheetVisible"
+      :duration="ACTION_SHEET_DURATION"
+      teleport="body"
+      :actions="websiteActions"
+      :cancel-text="t('common.cancel')"
+      close-on-click-action
+      @select="onSelectWebsite"
+    />
+    <van-action-sheet
+      v-model:show="windowSheetVisible"
+      :duration="ACTION_SHEET_DURATION"
+      teleport="body"
+      :actions="windowActions"
+      :cancel-text="t('common.cancel')"
+      close-on-click-action
+      @select="onSelectWindow"
+    />
   </div>
 </template>
 
@@ -106,11 +131,14 @@ import { useI18n } from 'vue-i18n';
 import { fetchRealtimeStats, fetchWebsites } from '@/api';
 import type { RealtimeStats, WebsiteInfo } from '@/api/types';
 import { getUserPreference, saveUserPreference } from '@/utils';
+import { ACTION_SHEET_DURATION } from '@mobile/constants/ui';
 
 const { t, n } = useI18n({ useScope: 'global' });
 
 const websites = ref<WebsiteInfo[]>([]);
 const websitesLoading = ref(false);
+const websiteSheetVisible = ref(false);
+const windowSheetVisible = ref(false);
 const currentWebsiteId = ref('');
 const windowMinutes = ref(5);
 const loading = ref(false);
@@ -121,11 +149,31 @@ const websiteOptions = computed(() =>
   websites.value.map((site) => ({ text: site.name, value: site.id }))
 );
 
+const websiteActions = computed(() =>
+  websites.value.map((site) => ({ name: site.name, value: site.id }))
+);
+
 const windowOptions = computed(() => [
   { text: t('realtime.minutes', { value: 5 }), value: 5 },
   { text: t('realtime.minutes', { value: 15 }), value: 15 },
   { text: t('realtime.minutes', { value: 30 }), value: 30 },
 ]);
+
+const windowActions = computed(() =>
+  windowOptions.value.map((option) => ({ name: option.text, value: option.value }))
+);
+
+const currentWebsiteLabel = computed(() => {
+  if (!currentWebsiteId.value) {
+    return t('common.selectWebsite');
+  }
+  return websites.value.find((site) => site.id === currentWebsiteId.value)?.name || t('common.selectWebsite');
+});
+
+const currentWindowLabel = computed(() => {
+  const option = windowOptions.value.find((item) => item.value === windowMinutes.value);
+  return option?.text || t('common.select');
+});
 
 const deviceRows = computed(() => {
   const items = realtimeData.value?.deviceBreakdown || [];
@@ -173,6 +221,18 @@ function resolveDeviceIcon(label: string) {
     return 'tablet';
   }
   return 'other';
+}
+
+function onSelectWebsite(action: { value?: string }) {
+  if (action?.value) {
+    currentWebsiteId.value = action.value;
+  }
+}
+
+function onSelectWindow(action: { value?: number }) {
+  if (typeof action?.value === 'number') {
+    windowMinutes.value = action.value;
+  }
 }
 
 async function loadWebsites() {

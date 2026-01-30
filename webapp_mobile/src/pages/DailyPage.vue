@@ -1,6 +1,6 @@
 <template>
   <div class="mobile-page">
-    <section class="mobile-panel">
+    <section class="mobile-panel has-dropdown">
       <div class="mobile-panel-header">
         <div>
           <div class="section-title">{{ t('daily.title') }}</div>
@@ -10,10 +10,16 @@
           {{ t('common.refresh') }}
         </van-button>
       </div>
-      <van-dropdown-menu>
-        <van-dropdown-item v-model="currentWebsiteId" :options="websiteOptions" />
-        <van-dropdown-item v-model="dateOption" :options="dateOptions" />
-      </van-dropdown-menu>
+      <div class="filter-row">
+        <button type="button" class="filter-trigger" @click="websiteSheetVisible = true">
+          <span class="filter-value">{{ currentWebsiteLabel }}</span>
+          <van-icon name="arrow-down" />
+        </button>
+        <button type="button" class="filter-trigger" @click="dateSheetVisible = true">
+          <span class="filter-value">{{ currentDateLabel }}</span>
+          <van-icon name="arrow-down" />
+        </button>
+      </div>
     </section>
 
     <van-empty v-if="!currentWebsiteId && !websitesLoading" :description="t('common.emptyWebsite')" />
@@ -96,6 +102,25 @@
       :max-date="maxDate"
       @confirm="onConfirmDate"
     />
+
+    <van-action-sheet
+      v-model:show="websiteSheetVisible"
+      :duration="ACTION_SHEET_DURATION"
+      teleport="body"
+      :actions="websiteActions"
+      :cancel-text="t('common.cancel')"
+      close-on-click-action
+      @select="onSelectWebsite"
+    />
+    <van-action-sheet
+      v-model:show="dateSheetVisible"
+      :duration="ACTION_SHEET_DURATION"
+      teleport="body"
+      :actions="dateActions"
+      :cancel-text="t('common.cancel')"
+      close-on-click-action
+      @select="onSelectDateOption"
+    />
   </div>
 </template>
 
@@ -105,11 +130,14 @@ import { useI18n } from 'vue-i18n';
 import { fetchOverallStats, fetchTimeSeriesStats, fetchWebsites } from '@/api';
 import type { TimeSeriesStats, WebsiteInfo } from '@/api/types';
 import { formatDate, formatTraffic, getUserPreference, saveUserPreference } from '@/utils';
+import { ACTION_SHEET_DURATION } from '@mobile/constants/ui';
 
 const { t, n } = useI18n({ useScope: 'global' });
 
 const websites = ref<WebsiteInfo[]>([]);
 const websitesLoading = ref(false);
+const websiteSheetVisible = ref(false);
+const dateSheetVisible = ref(false);
 const currentWebsiteId = ref('');
 const currentDate = ref(getUserPreference('dailyReportDate', '') || formatDate(new Date()));
 const dateOption = ref('today');
@@ -126,6 +154,10 @@ const websiteOptions = computed(() =>
   websites.value.map((site) => ({ text: site.name, value: site.id }))
 );
 
+const websiteActions = computed(() =>
+  websites.value.map((site) => ({ name: site.name, value: site.id }))
+);
+
 const todayLabel = computed(() => formatDate(new Date()));
 const yesterdayLabel = computed(() => {
   const date = new Date();
@@ -138,6 +170,27 @@ const dateOptions = computed(() => [
   { text: t('common.yesterday'), value: 'yesterday' },
   { text: currentDate.value, value: 'custom' },
 ]);
+
+const dateActions = computed(() =>
+  dateOptions.value.map((option) => ({ name: option.text, value: option.value }))
+);
+
+const currentWebsiteLabel = computed(() => {
+  if (!currentWebsiteId.value) {
+    return t('common.selectWebsite');
+  }
+  return websites.value.find((site) => site.id === currentWebsiteId.value)?.name || t('common.selectWebsite');
+});
+
+const currentDateLabel = computed(() => {
+  if (dateOption.value === 'today') {
+    return t('common.today');
+  }
+  if (dateOption.value === 'yesterday') {
+    return t('common.yesterday');
+  }
+  return currentDate.value;
+});
 
 const metricCards = computed(() => {
   const data = overall.value || {};
@@ -204,6 +257,18 @@ function onConfirmDate(date: Date | Date[]) {
   currentDate.value = formatDate(picked);
   dateOption.value = 'custom';
   calendarVisible.value = false;
+}
+
+function onSelectWebsite(action: { value?: string }) {
+  if (action?.value) {
+    currentWebsiteId.value = action.value;
+  }
+}
+
+function onSelectDateOption(action: { value?: string }) {
+  if (action?.value) {
+    dateOption.value = action.value;
+  }
 }
 
 async function loadWebsites() {

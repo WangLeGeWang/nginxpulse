@@ -189,8 +189,8 @@ start_frontend() {
 }
 
 start_mobile_frontend() {
-  echo "Starting mobile frontend on http://localhost:8087"
-  (cd "$ROOT_DIR/webapp_mobile" && npm run dev) &
+  echo "Starting mobile frontend on http://localhost:8087 (LAN: http://<your-ip>:8087)"
+  (cd "$ROOT_DIR/webapp_mobile" && npm run dev -- --host 0.0.0.0 --port 8087) &
   mobile_frontend_pid=$!
 }
 

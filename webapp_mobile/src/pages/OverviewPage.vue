@@ -1,6 +1,6 @@
 <template>
   <div class="mobile-page">
-    <section class="mobile-panel">
+    <section class="mobile-panel has-dropdown">
       <div class="mobile-panel-header">
         <div>
           <div class="section-title">{{ t('app.menu.overview') }}</div>
@@ -10,10 +10,16 @@
           {{ t('common.refresh') }}
         </van-button>
       </div>
-      <van-dropdown-menu>
-        <van-dropdown-item v-model="currentWebsiteId" :options="websiteOptions" />
-        <van-dropdown-item v-model="dateRange" :options="dateRangeOptions" />
-      </van-dropdown-menu>
+      <div class="filter-row">
+        <button type="button" class="filter-trigger" @click="websiteSheetVisible = true">
+          <span class="filter-value">{{ currentWebsiteLabel }}</span>
+          <van-icon name="arrow-down" />
+        </button>
+        <button type="button" class="filter-trigger" @click="rangeSheetVisible = true">
+          <span class="filter-value">{{ currentRangeLabel }}</span>
+          <van-icon name="arrow-down" />
+        </button>
+      </div>
     </section>
 
     <van-empty v-if="!currentWebsiteId && !websitesLoading" :description="t('common.emptyWebsite')" />
@@ -107,6 +113,25 @@
         </section>
       </div>
     </div>
+
+    <van-action-sheet
+      v-model:show="websiteSheetVisible"
+      :duration="ACTION_SHEET_DURATION"
+      teleport="body"
+      :actions="websiteActions"
+      :cancel-text="t('common.cancel')"
+      close-on-click-action
+      @select="onSelectWebsite"
+    />
+    <van-action-sheet
+      v-model:show="rangeSheetVisible"
+      :duration="ACTION_SHEET_DURATION"
+      teleport="body"
+      :actions="rangeActions"
+      :cancel-text="t('common.cancel')"
+      close-on-click-action
+      @select="onSelectRange"
+    />
   </div>
 </template>
 
@@ -118,11 +143,14 @@ import type { SimpleSeriesStats, WebsiteInfo } from '@/api/types';
 import { formatRefererLabel } from '@/i18n/mappings';
 import { normalizeLocale } from '@/i18n';
 import { formatTraffic, getUserPreference, saveUserPreference } from '@/utils';
+import { ACTION_SHEET_DURATION } from '@mobile/constants/ui';
 
 const { t, n, locale } = useI18n({ useScope: 'global' });
 
 const websites = ref<WebsiteInfo[]>([]);
 const websitesLoading = ref(false);
+const websiteSheetVisible = ref(false);
+const rangeSheetVisible = ref(false);
 const currentWebsiteId = ref('');
 const dateRange = ref('today');
 const loading = ref(false);
@@ -134,12 +162,32 @@ const websiteOptions = computed(() =>
   websites.value.map((site) => ({ text: site.name, value: site.id }))
 );
 
+const websiteActions = computed(() =>
+  websites.value.map((site) => ({ name: site.name, value: site.id }))
+);
+
 const dateRangeOptions = computed(() => [
   { text: t('common.today'), value: 'today' },
   { text: t('common.yesterday'), value: 'yesterday' },
   { text: t('common.last7Days'), value: 'last7days' },
   { text: t('common.last30Days'), value: 'last30days' },
 ]);
+
+const rangeActions = computed(() =>
+  dateRangeOptions.value.map((option) => ({ name: option.text, value: option.value }))
+);
+
+const currentWebsiteLabel = computed(() => {
+  if (!currentWebsiteId.value) {
+    return t('common.selectWebsite');
+  }
+  return websites.value.find((site) => site.id === currentWebsiteId.value)?.name || t('common.selectWebsite');
+});
+
+const currentRangeLabel = computed(() => {
+  const option = dateRangeOptions.value.find((item) => item.value === dateRange.value);
+  return option?.text || t('common.select');
+});
 
 const metricCards = computed(() => {
   const data = overall.value || {};
@@ -181,6 +229,18 @@ function formatCount(value: number | string | undefined | null) {
     return t('common.none');
   }
   return n(num);
+}
+
+function onSelectWebsite(action: { value?: string }) {
+  if (action?.value) {
+    currentWebsiteId.value = action.value;
+  }
+}
+
+function onSelectRange(action: { value?: string }) {
+  if (action?.value) {
+    dateRange.value = action.value;
+  }
 }
 
 function buildSeriesRows(stats: SimpleSeriesStats | null, formatLabel?: (value: string) => string) {

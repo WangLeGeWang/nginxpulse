@@ -1,6 +1,6 @@
 <template>
   <div class="mobile-page">
-    <section class="mobile-panel">
+    <section class="mobile-panel has-dropdown">
       <div class="mobile-panel-header">
         <div>
           <div class="section-title">{{ t('app.menu.logs') }}</div>
@@ -10,10 +10,16 @@
           {{ t('common.refresh') }}
         </van-button>
       </div>
-      <van-dropdown-menu>
-        <van-dropdown-item v-model="currentWebsiteId" :options="websiteOptions" />
-        <van-dropdown-item v-model="sortOrder" :options="sortOrderOptions" />
-      </van-dropdown-menu>
+      <div class="filter-row">
+        <button type="button" class="filter-trigger" @click="websiteSheetVisible = true">
+          <span class="filter-value">{{ currentWebsiteLabel }}</span>
+          <van-icon name="arrow-down" />
+        </button>
+        <button type="button" class="filter-trigger" @click="sortSheetVisible = true">
+          <span class="filter-value">{{ currentSortLabel }}</span>
+          <van-icon name="arrow-down" />
+        </button>
+      </div>
     </section>
 
     <van-empty v-if="!currentWebsiteId && !websitesLoading" :description="t('common.emptyWebsite')" />
@@ -66,6 +72,25 @@
         </van-list>
       </section>
     </div>
+
+    <van-action-sheet
+      v-model:show="websiteSheetVisible"
+      :duration="ACTION_SHEET_DURATION"
+      teleport="body"
+      :actions="websiteActions"
+      :cancel-text="t('common.cancel')"
+      close-on-click-action
+      @select="onSelectWebsite"
+    />
+    <van-action-sheet
+      v-model:show="sortSheetVisible"
+      :duration="ACTION_SHEET_DURATION"
+      teleport="body"
+      :actions="sortActions"
+      :cancel-text="t('common.cancel')"
+      close-on-click-action
+      @select="onSelectSortOrder"
+    />
   </div>
 </template>
 
@@ -77,11 +102,14 @@ import type { WebsiteInfo } from '@/api/types';
 import { formatLocationLabel } from '@/i18n/mappings';
 import { normalizeLocale } from '@/i18n';
 import { getUserPreference, saveUserPreference } from '@/utils';
+import { ACTION_SHEET_DURATION } from '@mobile/constants/ui';
 
 const { t, locale } = useI18n({ useScope: 'global' });
 
 const websites = ref<WebsiteInfo[]>([]);
 const websitesLoading = ref(false);
+const websiteSheetVisible = ref(false);
+const sortSheetVisible = ref(false);
 const currentWebsiteId = ref('');
 const sortField = ref(getUserPreference('logsSortField', 'timestamp'));
 const sortOrder = ref(getUserPreference('logsSortOrder', 'desc'));
@@ -101,10 +129,30 @@ const websiteOptions = computed(() =>
   websites.value.map((site) => ({ text: site.name, value: site.id }))
 );
 
+const websiteActions = computed(() =>
+  websites.value.map((site) => ({ name: site.name, value: site.id }))
+);
+
 const sortOrderOptions = computed(() => [
   { text: t('logs.sortDesc'), value: 'desc' },
   { text: t('logs.sortAsc'), value: 'asc' },
 ]);
+
+const sortActions = computed(() =>
+  sortOrderOptions.value.map((option) => ({ name: option.text, value: option.value }))
+);
+
+const currentWebsiteLabel = computed(() => {
+  if (!currentWebsiteId.value) {
+    return t('common.selectWebsite');
+  }
+  return websites.value.find((site) => site.id === currentWebsiteId.value)?.name || t('common.selectWebsite');
+});
+
+const currentSortLabel = computed(() => {
+  const option = sortOrderOptions.value.find((item) => item.value === sortOrder.value);
+  return option?.text || t('common.select');
+});
 
 async function loadWebsites() {
   websitesLoading.value = true;
@@ -152,6 +200,18 @@ function mapLogItem(log: Record<string, any>, index: number) {
     statusType,
     pageview: Boolean(log.pageview_flag),
   };
+}
+
+function onSelectWebsite(action: { value?: string }) {
+  if (action?.value) {
+    currentWebsiteId.value = action.value;
+  }
+}
+
+function onSelectSortOrder(action: { value?: string }) {
+  if (action?.value) {
+    sortOrder.value = action.value;
+  }
 }
 
 async function loadMore() {
