@@ -575,12 +575,15 @@ function splitList(value: string) {
 }
 
 function parseOptionalInt(
-  value: string,
+  value: string | number | null | undefined,
   field: string,
   errors: FieldError[],
   allowZero: boolean
 ): number | undefined {
-  const trimmed = value.trim();
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  const trimmed = (typeof value === 'number' ? String(value) : value).trim();
   if (!trimmed) {
     return undefined;
   }

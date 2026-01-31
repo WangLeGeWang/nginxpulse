@@ -1168,10 +1168,13 @@ func (p *LogParser) parseLogLines(
 			return
 		}
 
-		p.queueBatchIPGeo(batch)
-
+		// 先把本批次 location 标记为“待解析”，确保日志落库后前端可见；
+		// 再在日志成功落库后写入 ip_geo_pending，避免“先入队、后落库”导致回填命中空 ip_id 后把队列误删。
+		p.markBatchIPGeoPending(batch)
 		if err := p.repo.BatchInsertLogsForWebsite(websiteID, batch); err != nil {
 			logrus.Errorf("批量插入网站 %s 的日志记录失败: %v", websiteID, err)
+		} else {
+			p.enqueueBatchIPGeo(batch)
 		}
 
 		batch = batch[:0] // 清空批次但保留容量
@@ -1252,10 +1255,12 @@ func (p *LogParser) IngestLines(websiteID, sourceID string, lines []string) (int
 		if len(batch) == 0 {
 			return nil
 		}
-		p.queueBatchIPGeo(batch)
+		// 先标记 location 为“待解析”，再在成功落库后写入 ip_geo_pending（避免竞态导致“待解析”长期不变）
+		p.markBatchIPGeoPending(batch)
 		if err := p.repo.BatchInsertLogsForWebsite(websiteID, batch); err != nil {
 			return err
 		}
+		p.enqueueBatchIPGeo(batch)
 		batch = batch[:0]
 		return nil
 	}
@@ -1318,11 +1323,30 @@ func buildDedupKey(websiteID, sourceID, line string) string {
 	return fmt.Sprintf("%s:%s:%x", websiteID, sourceID, hash[:])
 }
 
-func (p *LogParser) queueBatchIPGeo(batch []store.NginxLogRecord) {
+// markBatchIPGeoPending mutates the batch in-place to mark locations as "待解析"/"未知".
+// 注意：该操作必须发生在日志入库之前，否则日志不会以“待解析”维度写入。
+func (p *LogParser) markBatchIPGeoPending(batch []store.NginxLogRecord) {
 	if len(batch) == 0 {
 		return
 	}
+	for i := range batch {
+		ip := strings.TrimSpace(batch[i].IP)
+		if ip == "" {
+			batch[i].DomesticLocation = "未知"
+			batch[i].GlobalLocation = "未知"
+			continue
+		}
+		batch[i].DomesticLocation = pendingLocationLabel
+		batch[i].GlobalLocation = pendingLocationLabel
+	}
+}
 
+// enqueueBatchIPGeo writes unique IPs from the batch into ip_geo_pending.
+// 注意：该操作应在日志成功落库之后再执行，避免“先入队、后落库”导致回填命中空结果并清理 pending，进而让日志长期停留在“待解析”。
+func (p *LogParser) enqueueBatchIPGeo(batch []store.NginxLogRecord) {
+	if len(batch) == 0 || p.repo == nil || p.demoMode {
+		return
+	}
 	unique := make([]string, 0, len(batch))
 	seen := make(map[string]struct{}, len(batch))
 	for _, entry := range batch {
@@ -1336,22 +1360,11 @@ func (p *LogParser) queueBatchIPGeo(batch []store.NginxLogRecord) {
 		seen[ip] = struct{}{}
 		unique = append(unique, ip)
 	}
-
-	if p.repo != nil && len(unique) > 0 {
-		if err := p.repo.UpsertIPGeoPending(unique); err != nil {
-			logrus.WithError(err).Warn("写入 IP 归属地待解析队列失败")
-		}
+	if len(unique) == 0 {
+		return
 	}
-
-	for i := range batch {
-		ip := strings.TrimSpace(batch[i].IP)
-		if ip == "" {
-			batch[i].DomesticLocation = "未知"
-			batch[i].GlobalLocation = "未知"
-			continue
-		}
-		batch[i].DomesticLocation = pendingLocationLabel
-		batch[i].GlobalLocation = pendingLocationLabel
+	if err := p.repo.UpsertIPGeoPending(unique); err != nil {
+		logrus.WithError(err).Warn("写入 IP 归属地待解析队列失败")
 	}
 }
 
