@@ -692,6 +692,27 @@ body.dark-mode .mobile-filter-group {
   padding: 10px 12px;
 }
 
+.filter-advanced-entry .van-cell__value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.filter-count-tag {
+  min-width: 24px;
+  justify-content: center;
+}
+
+.filter-tag-row {
+  padding: 0 4px;
+  margin-top: 2px;
+}
+
+.filter-tag-row .van-tag {
+  background: rgba(29, 107, 255, 0.08);
+  border-color: rgba(29, 107, 255, 0.2);
+}
+
 .mobile-log-item {
   display: grid;
   gap: 6px;
@@ -802,8 +823,81 @@ body.dark-mode .method-pill {
   max-height: 80vh;
 }
 
+.log-filter-popup {
+  max-height: 80vh;
+}
+
 .log-detail-sheet {
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+.log-filter-sheet {
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  display: grid;
+  gap: 14px;
+}
+
+.log-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.log-filter-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--mobile-text);
+}
+
+.log-filter-close {
+  font-size: 20px;
+  color: var(--mobile-muted);
+}
+
+.log-filter-section {
+  display: grid;
+  gap: 10px;
+}
+
+.log-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mobile-muted);
+}
+
+.status-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-chip {
+  border: 1px solid var(--mobile-border);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mobile-muted);
+  cursor: pointer;
+}
+
+.status-chip.is-active {
+  background: rgba(29, 107, 255, 0.12);
+  border-color: rgba(29, 107, 255, 0.25);
+  color: var(--mobile-primary);
+}
+
+.mobile-filter-field {
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 14px;
+  border: 1px solid var(--mobile-border);
+  box-shadow: var(--mobile-shadow-soft);
+  overflow: hidden;
+}
+
+.mobile-filter-field .van-field__control {
+  font-size: 14px;
 }
 
 .log-detail-header {
@@ -852,7 +946,16 @@ body.dark-mode .log-detail-sheet {
   color: var(--mobile-text);
 }
 
+body.dark-mode .log-filter-sheet {
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--mobile-text);
+}
+
 body.dark-mode .log-detail-title {
+  color: #f8fafc;
+}
+
+body.dark-mode .log-filter-title {
   color: #f8fafc;
 }
 
@@ -864,6 +967,10 @@ body.dark-mode .log-detail-close {
   color: #94a3b8;
 }
 
+body.dark-mode .log-filter-close {
+  color: #94a3b8;
+}
+
 body.dark-mode .log-detail-meta .van-cell {
   background: rgba(15, 23, 42, 0.6);
   color: #e2e8f0;
@@ -871,6 +978,27 @@ body.dark-mode .log-detail-meta .van-cell {
 
 body.dark-mode .log-detail-meta .van-cell::after {
   border-color: rgba(148, 163, 184, 0.2);
+}
+
+body.dark-mode .filter-tag-row .van-tag {
+  background: rgba(90, 162, 255, 0.16);
+  border-color: rgba(90, 162, 255, 0.32);
+}
+
+body.dark-mode .status-chip {
+  background: rgba(17, 24, 39, 0.65);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: var(--mobile-muted);
+}
+
+body.dark-mode .status-chip.is-active {
+  background: rgba(90, 162, 255, 0.2);
+  border-color: rgba(90, 162, 255, 0.4);
+  color: #cfe0ff;
+}
+
+body.dark-mode .mobile-filter-field {
+  background: rgba(18, 24, 39, 0.85);
 }
 
 .device-icon {

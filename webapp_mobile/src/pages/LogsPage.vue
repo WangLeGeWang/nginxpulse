@@ -40,7 +40,34 @@
               <van-switch v-model="pageviewOnly" size="20" />
             </template>
           </van-cell>
+          <van-cell
+            :title="t('logs.advancedFilters')"
+            is-link
+            class="filter-advanced-entry"
+            @click="advancedVisible = true"
+          >
+            <template #value>
+              <van-tag v-if="activeFilterCount" round plain type="primary" class="filter-count-tag">
+                {{ activeFilterCount }}
+              </van-tag>
+            </template>
+          </van-cell>
         </van-cell-group>
+        <div v-if="activeFilterTags.length" class="filter-tag-row">
+          <div class="inline-tags">
+            <van-tag
+              v-for="tag in activeFilterTags"
+              :key="tag.key"
+              round
+              plain
+              closeable
+              type="primary"
+              @close="removeFilter(tag.key)"
+            >
+              {{ tag.label }}
+            </van-tag>
+          </div>
+        </div>
       </section>
 
       <section class="mobile-panel list-card mobile-log-list">
@@ -110,6 +137,62 @@
       </div>
     </van-popup>
 
+    <van-popup
+      v-model:show="advancedVisible"
+      position="bottom"
+      round
+      teleport="body"
+      class="log-filter-popup"
+    >
+      <div class="log-filter-sheet">
+        <div class="log-filter-header">
+          <div class="log-filter-title">{{ t('logs.advancedFilters') }}</div>
+          <van-icon name="cross" class="log-filter-close" @click="advancedVisible = false" />
+        </div>
+        <div class="log-filter-section">
+          <div class="log-filter-label">{{ t('logs.statusCode') }}</div>
+          <div class="status-chip-row">
+            <button
+              v-for="option in statusClassOptions"
+              :key="option.value"
+              type="button"
+              class="status-chip"
+              :class="{ 'is-active': statusClass === option.value }"
+              :aria-pressed="statusClass === option.value"
+              @click="toggleStatusClass(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <van-field
+            v-model="statusCodeInput"
+            type="digit"
+            :placeholder="t('logs.statusCodePlaceholder')"
+            clearable
+            maxlength="3"
+            class="mobile-filter-field"
+          />
+        </div>
+        <van-cell-group class="mobile-filter-group">
+          <van-cell :title="t('logs.excludeInternal')">
+            <template #value>
+              <van-switch v-model="excludeInternal" size="20" />
+            </template>
+          </van-cell>
+          <van-cell :title="t('logs.excludeSpider')">
+            <template #value>
+              <van-switch v-model="excludeSpider" size="20" />
+            </template>
+          </van-cell>
+          <van-cell :title="t('logs.excludeForeign')">
+            <template #value>
+              <van-switch v-model="excludeForeign" size="20" />
+            </template>
+          </van-cell>
+        </van-cell-group>
+      </div>
+    </van-popup>
+
     <van-action-sheet
       v-model:show="websiteSheetVisible"
       :duration="ACTION_SHEET_DURATION"
@@ -152,6 +235,12 @@ const sortField = ref(getUserPreference('logsSortField', 'timestamp'));
 const sortOrder = ref(getUserPreference('logsSortOrder', 'desc'));
 const searchFilter = ref('');
 const pageviewOnly = ref(false);
+const advancedVisible = ref(false);
+const statusClass = ref(getUserPreference('logsStatusClass', ''));
+const statusCodeInput = ref(getUserPreference('logsStatusCode', ''));
+const excludeInternal = ref(getUserPreference('logsExcludeInternal', '') === '1');
+const excludeSpider = ref(getUserPreference('logsExcludeSpider', '') === '1');
+const excludeForeign = ref(getUserPreference('logsExcludeForeign', '') === '1');
 
 const loading = ref(false);
 const finished = ref(false);
@@ -163,6 +252,13 @@ const detailVisible = ref(false);
 const detailItem = ref<Record<string, any> | null>(null);
 
 const currentLocale = computed(() => normalizeLocale(locale.value));
+
+const statusClassOptions = [
+  { label: '2xx', value: '2xx' },
+  { label: '3xx', value: '3xx' },
+  { label: '4xx', value: '4xx' },
+  { label: '5xx', value: '5xx' },
+];
 
 const websiteOptions = computed(() =>
   websites.value.map((site) => ({ text: site.name, value: site.id }))
@@ -192,6 +288,33 @@ const currentSortLabel = computed(() => {
   const option = sortOrderOptions.value.find((item) => item.value === sortOrder.value);
   return option?.text || t('common.select');
 });
+
+const statusCodeParam = computed(() => resolveStatusCodeParam(statusCodeInput.value));
+const statusClassParam = computed(() => (statusCodeParam.value ? '' : statusClass.value));
+
+const activeFilterTags = computed(() => {
+  const tags: Array<{ key: string; label: string }> = [];
+  if (pageviewOnly.value) {
+    tags.push({ key: 'pageview', label: t('logs.excludeNoPv') });
+  }
+  if (statusCodeParam.value) {
+    tags.push({ key: 'statusCode', label: `${t('logs.statusCode')} ${statusCodeParam.value}` });
+  } else if (statusClassParam.value) {
+    tags.push({ key: 'statusClass', label: `${t('logs.statusCode')} ${statusClassParam.value}` });
+  }
+  if (excludeInternal.value) {
+    tags.push({ key: 'excludeInternal', label: t('logs.excludeInternal') });
+  }
+  if (excludeSpider.value) {
+    tags.push({ key: 'excludeSpider', label: t('logs.excludeSpider') });
+  }
+  if (excludeForeign.value) {
+    tags.push({ key: 'excludeForeign', label: t('logs.excludeForeign') });
+  }
+  return tags;
+});
+
+const activeFilterCount = computed(() => activeFilterTags.value.length);
 
 async function loadWebsites() {
   websitesLoading.value = true;
@@ -258,6 +381,47 @@ function openLogDetail(item: Record<string, any>) {
   detailVisible.value = true;
 }
 
+function resolveStatusCodeParam(value: string) {
+  if (!value) {
+    return '';
+  }
+  const normalized = Math.trunc(Number(value));
+  if (!Number.isFinite(normalized) || normalized < 100 || normalized > 599) {
+    return '';
+  }
+  return String(normalized);
+}
+
+function toggleStatusClass(value: string) {
+  statusClass.value = statusClass.value === value ? '' : value;
+  statusCodeInput.value = '';
+}
+
+function removeFilter(key: string) {
+  switch (key) {
+    case 'pageview':
+      pageviewOnly.value = false;
+      break;
+    case 'statusCode':
+      statusCodeInput.value = '';
+      break;
+    case 'statusClass':
+      statusClass.value = '';
+      break;
+    case 'excludeInternal':
+      excludeInternal.value = false;
+      break;
+    case 'excludeSpider':
+      excludeSpider.value = false;
+      break;
+    case 'excludeForeign':
+      excludeForeign.value = false;
+      break;
+    default:
+      break;
+  }
+}
+
 async function loadMore() {
   loading.value = true;
   if (!currentWebsiteId.value) {
@@ -274,14 +438,19 @@ async function loadMore() {
       sortOrder.value,
       searchFilter.value,
       undefined,
+      statusClassParam.value || undefined,
+      statusCodeParam.value || undefined,
+      excludeInternal.value,
       undefined,
       undefined,
       undefined,
       undefined,
       undefined,
+      pageviewOnly.value,
       undefined,
       undefined,
-      pageviewOnly.value
+      excludeSpider.value,
+      excludeForeign.value
     );
     const rawLogs = result.logs || [];
     const mapped = rawLogs.map((log: Record<string, any>, index: number) => mapLogItem(log, index));
@@ -308,6 +477,7 @@ function resetAndLoad() {
   loadMore();
 }
 
+let statusCodeTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(currentWebsiteId, (value) => {
   if (value) {
@@ -316,9 +486,30 @@ watch(currentWebsiteId, (value) => {
   resetAndLoad();
 });
 
-watch([sortOrder, pageviewOnly], () => {
+watch([sortOrder, pageviewOnly, excludeInternal, excludeSpider, excludeForeign], () => {
   saveUserPreference('logsSortOrder', sortOrder.value);
+  saveUserPreference('logsExcludeInternal', excludeInternal.value ? '1' : '');
+  saveUserPreference('logsExcludeSpider', excludeSpider.value ? '1' : '');
+  saveUserPreference('logsExcludeForeign', excludeForeign.value ? '1' : '');
   resetAndLoad();
+});
+
+watch(statusClass, (value) => {
+  saveUserPreference('logsStatusClass', value);
+  resetAndLoad();
+});
+
+watch(statusCodeInput, (value) => {
+  saveUserPreference('logsStatusCode', value);
+  if (value) {
+    statusClass.value = '';
+  }
+  if (statusCodeTimer) {
+    clearTimeout(statusCodeTimer);
+  }
+  statusCodeTimer = setTimeout(() => {
+    resetAndLoad();
+  }, 400);
 });
 
 onMounted(() => {
