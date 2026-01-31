@@ -220,9 +220,6 @@ function onSelectSortOrder(action: { value?: string }) {
 }
 
 async function loadMore() {
-  if (loading.value) {
-    return;
-  }
   loading.value = true;
   if (!currentWebsiteId.value) {
     finished.value = true;
