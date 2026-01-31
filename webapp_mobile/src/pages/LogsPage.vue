@@ -51,7 +51,13 @@
           @load="loadMore"
         >
           <van-cell-group inset>
-            <van-cell v-for="item in logs" :key="item.key" :class="['mobile-log-cell', item.statusType]">
+            <van-cell
+              v-for="item in logs"
+              :key="item.key"
+              :class="['mobile-log-cell', item.statusType]"
+              clickable
+              @click="openLogDetail(item)"
+            >
               <template #title>
                 <div class="mobile-log-item">
                   <div class="mobile-log-header">
@@ -77,6 +83,32 @@
         </van-list>
       </section>
     </div>
+
+    <van-popup
+      v-model:show="detailVisible"
+      position="bottom"
+      round
+      teleport="body"
+      class="log-detail-popup"
+    >
+      <div v-if="detailItem" class="log-detail-sheet">
+        <div class="log-detail-header">
+          <div class="log-detail-title">{{ t('app.menu.logs') }}</div>
+          <van-icon name="cross" class="log-detail-close" @click="detailVisible = false" />
+        </div>
+        <div class="log-detail-path">{{ detailItem.path }}</div>
+        <div class="log-detail-tags">
+          <van-tag :type="detailItem.statusType" round>{{ detailItem.statusCode }}</van-tag>
+          <van-tag v-if="detailItem.pageview" plain type="primary" round>PV</van-tag>
+        </div>
+        <van-cell-group inset class="log-detail-meta">
+          <van-cell :title="t('common.time')" :value="detailItem.time" />
+          <van-cell :title="t('common.ip')" :value="detailItem.ip" />
+          <van-cell :title="t('common.location')" :value="detailItem.location" />
+          <van-cell :title="t('common.method')" :value="detailItem.method" />
+        </van-cell-group>
+      </div>
+    </van-popup>
 
     <van-action-sheet
       v-model:show="websiteSheetVisible"
@@ -127,6 +159,8 @@ const page = ref(1);
 const pageSize = 20;
 const totalPages = ref(0);
 const logs = ref<Array<Record<string, any>>>([]);
+const detailVisible = ref(false);
+const detailItem = ref<Record<string, any> | null>(null);
 
 const currentLocale = computed(() => normalizeLocale(locale.value));
 
@@ -217,6 +251,11 @@ function onSelectSortOrder(action: { value?: string }) {
   if (action?.value) {
     sortOrder.value = action.value;
   }
+}
+
+function openLogDetail(item: Record<string, any>) {
+  detailItem.value = item;
+  detailVisible.value = true;
 }
 
 async function loadMore() {

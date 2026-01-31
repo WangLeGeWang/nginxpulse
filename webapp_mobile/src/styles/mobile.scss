@@ -797,6 +797,55 @@ body.dark-mode .method-pill {
   color: #cfe0ff;
 }
 
+.log-detail-popup {
+  max-height: 80vh;
+}
+
+.log-detail-sheet {
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+.log-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.log-detail-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--mobile-text);
+}
+
+.log-detail-close {
+  font-size: 20px;
+  color: var(--mobile-muted);
+}
+
+.log-detail-path {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mobile-text);
+  line-height: 1.4;
+  word-break: break-all;
+  margin-bottom: 10px;
+}
+
+.log-detail-tags {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.log-detail-meta {
+  background: transparent;
+}
+
+.log-detail-meta .van-cell {
+  background: transparent;
+}
+
 .device-icon {
   width: 34px;
   height: 34px;

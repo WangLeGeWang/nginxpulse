@@ -56,6 +56,7 @@ const zhCN = {
     browser: '浏览器',
     os: '系统',
     ip: 'IP',
+    method: '方法',
     url: '页面地址',
     pageview: 'PV',
     visitors: '访客数',

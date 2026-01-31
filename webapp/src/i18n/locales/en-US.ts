@@ -56,6 +56,7 @@ const enUS = {
     browser: 'Browser',
     os: 'OS',
     ip: 'IP',
+    method: 'Method',
     url: 'Page URL',
     pageview: 'PV',
     visitors: 'Visitors',
