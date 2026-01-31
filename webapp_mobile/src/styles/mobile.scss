@@ -847,6 +847,32 @@ body.dark-mode .method-pill {
   background: transparent;
 }
 
+body.dark-mode .log-detail-sheet {
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--mobile-text);
+}
+
+body.dark-mode .log-detail-title {
+  color: #f8fafc;
+}
+
+body.dark-mode .log-detail-path {
+  color: #e2e8f0;
+}
+
+body.dark-mode .log-detail-close {
+  color: #94a3b8;
+}
+
+body.dark-mode .log-detail-meta .van-cell {
+  background: rgba(15, 23, 42, 0.6);
+  color: #e2e8f0;
+}
+
+body.dark-mode .log-detail-meta .van-cell::after {
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
 .device-icon {
   width: 34px;
   height: 34px;
