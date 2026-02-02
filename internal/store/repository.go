@@ -78,14 +78,38 @@ func sanitizeUTF8(s string) string {
 	return strings.ToValidUTF8(s, "?")
 }
 
+const (
+	maxURLBytes     = 2000
+	maxRefererBytes = 2000
+	maxUABytes      = 256
+)
+
+func truncateUTF8Bytes(s string, maxBytes int) string {
+	if maxBytes <= 0 || len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.ValidString(s[:cut]) {
+		cut--
+	}
+	if cut == 0 {
+		return ""
+	}
+	return s[:cut]
+}
+
+func sanitizeAndTruncate(s string, maxBytes int) string {
+	return truncateUTF8Bytes(sanitizeUTF8(s), maxBytes)
+}
+
 func sanitizeLogRecord(log NginxLogRecord) NginxLogRecord {
 	log.IP = sanitizeUTF8(log.IP)
 	log.Method = sanitizeUTF8(log.Method)
-	log.Url = sanitizeUTF8(log.Url)
-	log.Referer = sanitizeUTF8(log.Referer)
-	log.UserBrowser = sanitizeUTF8(log.UserBrowser)
-	log.UserOs = sanitizeUTF8(log.UserOs)
-	log.UserDevice = sanitizeUTF8(log.UserDevice)
+	log.Url = sanitizeAndTruncate(log.Url, maxURLBytes)
+	log.Referer = sanitizeAndTruncate(log.Referer, maxRefererBytes)
+	log.UserBrowser = sanitizeAndTruncate(log.UserBrowser, maxUABytes)
+	log.UserOs = sanitizeAndTruncate(log.UserOs, maxUABytes)
+	log.UserDevice = sanitizeAndTruncate(log.UserDevice, maxUABytes)
 	log.DomesticLocation = sanitizeUTF8(log.DomesticLocation)
 	log.GlobalLocation = sanitizeUTF8(log.GlobalLocation)
 	return log
