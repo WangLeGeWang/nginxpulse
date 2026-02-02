@@ -2,8 +2,9 @@ package main
 
 import (
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/likaia/nginxpulse/internal/app"
 	"github.com/sirupsen/logrus"
@@ -22,6 +23,11 @@ func main() {
 }
 
 func tryTerminatePID1IfNginx() {
+	// 仅 Linux 容器场景需要处理 PID 1；其它平台直接跳过，保证跨平台编译/运行安全。
+	if runtime.GOOS != "linux" {
+		return
+	}
+
 	commBytes, err := os.ReadFile("/proc/1/comm")
 	if err != nil {
 		return
@@ -30,9 +36,14 @@ func tryTerminatePID1IfNginx() {
 	if comm != "nginx" {
 		return
 	}
-	if err := syscall.Kill(1, syscall.SIGTERM); err != nil {
+
+	// 避免直接依赖 syscall.Kill/SIGTERM（Windows 上不可编译）。
+	// Linux 容器内通常存在 `kill`（busybox/coreutils），这里用外部命令发送 SIGTERM 给 PID 1。
+	if err := exec.Command("kill", "-TERM", "1").Run(); err != nil {
 		logrus.WithError(err).Warn("服务启动失败：尝试终止 PID 1 (nginx) 失败")
 		return
 	}
 	logrus.Warn("服务启动失败：检测到 PID 1 为 nginx，已发送 SIGTERM 以终止容器")
 }
+
+
