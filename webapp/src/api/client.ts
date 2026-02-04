@@ -1,12 +1,13 @@
 import axios from 'axios';
 import { i18n } from '@/i18n';
+import { getWebBasePathWithSlash } from '@/utils';
 
 const ACCESS_KEY_STORAGE = 'nginxpulse_access_key';
 const ACCESS_KEY_HEADER = 'X-NginxPulse-Key';
 const ACCESS_KEY_EVENT = 'nginxpulse:access-key-required';
 
 const client = axios.create({
-  baseURL: '/',
+  baseURL: getWebBasePathWithSlash(),
   timeout: 15000,
   headers: {
     'X-Requested-With': 'XMLHttpRequest',

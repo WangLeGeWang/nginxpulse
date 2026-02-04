@@ -23,6 +23,7 @@ const (
 	envDemoMode          = "DEMO_MODE"
 	envAccessKeys        = "ACCESS_KEYS"
 	envLanguage          = "APP_LANGUAGE"
+	envWebBasePath       = "WEB_BASE_PATH"
 	envIPGeoCacheLimit   = "IP_GEO_CACHE_LIMIT"
 	envIPGeoAPIURL       = "IP_GEO_API_URL"
 	envDBDriver          = "DB_DRIVER"
@@ -202,6 +203,9 @@ func applyEnvOverrides(cfg *Config) error {
 	if raw, _ := getEnvValue(envLanguage); raw != "" {
 		cfg.System.Language = raw
 	}
+	if raw, _ := getEnvValue(envWebBasePath); raw != "" {
+		cfg.System.WebBasePath = strings.TrimSpace(raw)
+	}
 
 	if raw, _ := getEnvValue(envServerPort); raw != "" {
 		if !strings.Contains(raw, ":") {
@@ -293,6 +297,7 @@ func applyDefaults(cfg *Config) {
 		cfg.System.Language = defaultSystem.Language
 	}
 	cfg.System.Language = NormalizeLanguage(cfg.System.Language)
+	cfg.System.WebBasePath = NormalizeWebBasePath(cfg.System.WebBasePath)
 	if cfg.Server.Port == "" {
 		cfg.Server.Port = defaultServer.Port
 	}

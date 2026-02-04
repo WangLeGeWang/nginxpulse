@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { getWebBasePathWithSlash } from '@/utils';
 import OverviewPage from '@/pages/OverviewPage.vue';
 import DailyPage from '@/pages/DailyPage.vue';
 import RealtimePage from '@/pages/RealtimePage.vue';
@@ -6,7 +7,7 @@ import LogsPage from '@/pages/LogsPage.vue';
 import SetupPage from '@/pages/SetupPage.vue';
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(getWebBasePathWithSlash()),
   routes: [
     {
       path: '/',

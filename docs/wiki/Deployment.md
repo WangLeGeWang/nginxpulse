@@ -132,6 +132,30 @@ docker run ... \
 - 8088: 前端页面
 - 8089: API 服务
 
+## 自定义前端访问前缀
+当需要以二级路径访问前端（如 `/nginxpulse/`）时，可通过系统配置 `system.webBasePath` 设置前缀。该前缀仅支持**单段路径**，修改后需要重启服务生效，且根路径 `/` 将不再可访问。
+
+### Docker 镜像（内置 Nginx）
+1. 在系统配置中设置 `webBasePath`（或环境变量 `WEB_BASE_PATH`）。
+2. 重启容器，访问地址变为：
+   - PC：`/<base>/`
+   - Mobile：`/<base>/m/`
+   - API：`/<base>/api/`
+
+镜像会在启动时生成新的 Nginx 配置与 `/app-config.js`，无需重新构建前端。
+
+### 单体部署（Go 内嵌前端）
+1. 在配置文件中设置 `system.webBasePath`。
+2. 重启服务后访问：
+   - PC：`/<base>/`
+   - Mobile：`/<base>/m/`
+   - API：`/<base>/api/`
+
+### 设计原理
+1. 通过 `/app-config.js` 下发 `window.__NGINXPULSE_BASE_PATH__`，前端运行期读取基路径，避免重新构建。
+2. 服务端中间件强制前缀隔离，只有 `/<base>/...` 能访问，API 仅允许 `/<base>/api/*`。
+3. 静态资源与 `/app-config.js` 不绑定前缀，保证前端可正常加载。
+
 ## 时区设置
 本项目使用系统时区进行日志解析与统计，请确保运行环境时区正确。
 - Docker: 挂载 `/etc/localtime:/etc/localtime:ro`

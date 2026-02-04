@@ -4,6 +4,69 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NginxPulse - Nginx访问统计</title>
+    <script src="/app-config.js"></script>
+    <script>
+      (function () {
+        var location = window.location;
+        var rawBase = String(window.__NGINXPULSE_BASE_PATH__ || '');
+        var basePrefix = rawBase.trim();
+        if (basePrefix) {
+          if (!basePrefix.startsWith('/')) {
+            basePrefix = '/' + basePrefix;
+          }
+          if (basePrefix.endsWith('/')) {
+            basePrefix = basePrefix.slice(0, -1);
+          }
+        }
+        var path = location.pathname || '/';
+        if (basePrefix) {
+          if (path === basePrefix) {
+            return;
+          }
+          if (path.indexOf(basePrefix + '/') !== 0) {
+            return;
+          }
+          path = path.slice(basePrefix.length) || '/';
+        }
+        var isMobilePath = path === '/m' || path.indexOf('/m/') === 0;
+        if (isMobilePath) {
+          return;
+        }
+        var isApiPath = path === '/api' || path.indexOf('/api/') === 0;
+        if (isApiPath) {
+          return;
+        }
+        var params = new URLSearchParams(location.search || '');
+        var view = params.get('view');
+        if (view === 'desktop') {
+          return;
+        }
+        var isMobile = false;
+        var uaData = navigator.userAgentData;
+        if (uaData && typeof uaData.mobile === 'boolean') {
+          isMobile = uaData.mobile;
+        } else {
+          var ua = (navigator.userAgent || '').toLowerCase();
+          isMobile = /android|iphone|ipad|ipod|mobile|windows phone|blackberry|opera mini|mobi/.test(ua);
+        }
+        if (!isMobile && view !== 'mobile') {
+          return;
+        }
+        var target = path === '/' ? '/m/' : '/m' + path;
+        if (basePrefix) {
+          target = basePrefix + target;
+        }
+        if (location.search) {
+          target += location.search;
+        }
+        if (location.hash) {
+          target += location.hash;
+        }
+        if (target !== location.pathname + location.search + location.hash) {
+          location.replace(target);
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>

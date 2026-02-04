@@ -58,6 +58,7 @@ export interface SystemConfig {
   demoMode?: boolean;
   accessKeys?: string[];
   language?: string;
+  webBasePath?: string;
 }
 
 export interface ServerConfig {

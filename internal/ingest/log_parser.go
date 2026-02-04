@@ -28,12 +28,19 @@ import (
 
 var (
 	defaultNginxLogRegex = `^(?P<ip>\S+) - (?P<user>\S+) \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<url>[^"]+) HTTP/\d\.\d" (?P<status>\d+) (?P<bytes>\d+) "(?P<referer>[^"]*)" "(?P<ua>[^"]*)"`
+	defaultApacheLogRegex = `^(?P<ip>\S+) (?P<ident>\S+) (?P<user>\S+) \[(?P<time>[^\]]+)\] "(?P<request>[^"]*)" (?P<status>\d{3}) (?P<bytes>\d+|-) "(?P<referer>[^"]*)" "(?P<ua>[^"]*)"`
+	defaultTraefikLogRegex = `^(?P<ip>\S+) (?P<ident>\S+) (?P<user>\S+) \[(?P<time>[^\]]+)\] "(?P<request>[^"]*)" (?P<status>\d{3}) (?P<bytes>\d+|-) "(?P<referer>[^"]*)" "(?P<ua>[^"]*)" (?P<req_count>\d+) "(?P<router>[^"]*)" "(?P<server_url>[^"]*)" (?P<duration_ms>[0-9.]+)ms`
+	defaultEnvoyLogRegex = `^\[(?P<time>[^\]]+)\] "(?P<request>[^"]*)" (?P<status>\d{3}) (?P<response_flags>\S+) (?P<bytes_received>\d+) (?P<bytes>\d+) (?P<duration>\d+) (?P<upstream_time>\S+) "(?P<ip>[^"]*)" "(?P<ua>[^"]*)" "(?P<request_id>[^"]*)" "(?P<authority>[^"]*)" "(?P<upstream_host>[^"]*)"`
+	defaultHAProxyLogRegex = `^(?:\w{3}\s+\d+\s+\d+:\d+:\d+\s+\S+\s+\S+\[\d+\]:\s+)?(?P<ip>\S+):\d+\s+\[(?P<time>[^\]]+)\]\s+\S+\s+\S+\s+-?\d+/-?\d+/-?\d+/-?\d+/-?\d+\s+(?P<status>\d{3})\s+(?P<bytes>\d+|-)\s+\S+\s+\S+\s+\S+\s+-?\d+/-?\d+/-?\d+/-?\d+/-?\d+\s+-?\d+/-?\d+(?:\s+(?:\{[^\}]*\}|-)){0,2}\s+\"(?P<request>[^\"]*)\"`
+	defaultNginxIngressLogRegex = `^(?P<ip>\S+) - (?P<user>\S+) \[(?P<time>[^\]]+)\] "(?P<request>[^"]*)" (?P<status>\d{3}) (?P<bytes>\d+|-) "(?P<referer>[^"]*)" "(?P<ua>[^"]*)" (?P<request_length>\d+) (?P<request_time>[0-9.]+) \[(?P<proxy_upstream_name>[^\]]*)\] \[(?P<proxy_alternative_upstream_name>[^\]]*)\] (?P<upstream_addr>[^ ]+(?:,\s*[^ ]+)*) (?P<upstream_response_length>[^ ]+(?:,\s*[^ ]+)*) (?P<upstream_response_time>[^ ]+(?:,\s*[^ ]+)*) (?P<upstream_status>[^ ]+(?:,\s*[^ ]+)*) (?P<req_id>\S+)`
+	defaultNPMLogRegex   = `^\[(?P<time>[^\]]+)\] - (?P<status>\d+) (?P<upstream_status>\d+) - (?P<method>\S+) (?P<scheme>\S+) (?P<host>\S+) "(?P<path>[^"]+)" \[Client (?P<ip>[^\]]+)\] \[Length (?P<bytes>\d+)\] \[Gzip (?P<gzip>[^\]]+)\] \[Sent-to (?P<upstream>[^\]]+)\] "(?P<ua>[^"]+)" "(?P<referer>[^"]*)"`
 	lastCleanupDate      = ""
 	parsingMu            sync.RWMutex
 	parsingMode          parseMode
 )
 
 const defaultNginxTimeLayout = "02/Jan/2006:15:04:05 -0700"
+const defaultHAProxyTimeLayout = "02/Jan/2006:15:04:05.000"
 
 const (
 	parseTypeRegex     = "regex"
@@ -1576,14 +1583,43 @@ func newLogLineParser(website config.WebsiteConfig, sourceCfg *config.SourceConf
 		}
 		pattern = compiled
 		source = "logFormat"
-	} else if logType == "caddy" {
-		return &logLineParser{
-			timeLayout: timeLayout,
-			source:     "caddy",
-			parseType:  parseTypeCaddyJSON,
-		}, nil
-	} else if logType != "nginx" {
-		return nil, fmt.Errorf("不支持的日志类型: %s", logType)
+	} else {
+		switch logType {
+		case "caddy":
+			return &logLineParser{
+				timeLayout: timeLayout,
+				source:     "caddy",
+				parseType:  parseTypeCaddyJSON,
+			}, nil
+		case "nginx":
+			// default nginx pattern
+		case "nginx-proxy-manager", "npm":
+			pattern = defaultNPMLogRegex
+			source = "nginx-proxy-manager"
+		case "apache", "httpd", "apache-httpd":
+			pattern = defaultApacheLogRegex
+			source = "apache"
+		case "tengine":
+			pattern = defaultNginxLogRegex
+			source = "tengine"
+		case "traefik", "traefik-ingress":
+			pattern = defaultTraefikLogRegex
+			source = "traefik"
+		case "envoy":
+			pattern = defaultEnvoyLogRegex
+			source = "envoy"
+		case "nginx-ingress", "ingress-nginx":
+			pattern = defaultNginxIngressLogRegex
+			source = "nginx-ingress"
+		case "haproxy", "haproxy-ingress":
+			pattern = defaultHAProxyLogRegex
+			source = "haproxy"
+			if strings.TrimSpace(timeLayout) == "" {
+				timeLayout = defaultHAProxyTimeLayout
+			}
+		default:
+			return nil, fmt.Errorf("不支持的日志类型: %s", logType)
+		}
 	}
 
 	regex, err := regexp.Compile(pattern)

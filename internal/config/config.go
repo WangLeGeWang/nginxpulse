@@ -102,6 +102,7 @@ type SystemConfig struct {
 	DemoMode         bool     `json:"demoMode"`
 	AccessKeys       []string `json:"accessKeys"`
 	Language         string   `json:"language"`
+	WebBasePath      string   `json:"webBasePath,omitempty"`
 }
 
 type ServerConfig struct {

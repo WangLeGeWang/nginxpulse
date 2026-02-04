@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -161,6 +162,27 @@ func ValidateConfig(cfg *Config, opts ValidateOptions) ValidationResult {
 	}
 	if cfg.System.IPGeoCacheLimit <= 0 {
 		addError("system.ipGeoCacheLimit", "ipGeoCacheLimit 必须大于 0")
+	}
+	if basePath := NormalizeWebBasePath(cfg.System.WebBasePath); basePath != "" {
+		if strings.Contains(basePath, "/") {
+			addError("system.webBasePath", "webBasePath 仅支持单段路径")
+		} else if !regexp.MustCompile("^[a-zA-Z0-9_-]+$").MatchString(basePath) {
+			addError("system.webBasePath", "webBasePath 仅支持字母、数字、下划线或短横线")
+		} else {
+			reserved := map[string]struct{}{
+				"api":          {},
+				"m":            {},
+				"assets":       {},
+				"favicon.svg":  {},
+				"brand-mark":   {},
+				"brand-mark.svg": {},
+				"app-config.js": {},
+				"health":       {},
+			}
+			if _, ok := reserved[strings.ToLower(basePath)]; ok {
+				addError("system.webBasePath", "webBasePath 与系统保留路径冲突")
+			}
+		}
 	}
 
 	if len(cfg.PVFilter.StatusCodeInclude) == 0 {

@@ -34,47 +34,47 @@ const buildParams = (params: Record<string, unknown> = {}) => {
 };
 
 export const fetchWebsites = async (): Promise<WebsiteInfo[]> => {
-  const response = await client.get<ApiResponse<WebsitesResponse>>('/api/websites');
+  const response = await client.get<ApiResponse<WebsitesResponse>>('api/websites');
   return response.data.websites || [];
 };
 
 export const fetchAppStatus = async (): Promise<AppStatusResponse> => {
-  const response = await client.get<ApiResponse<AppStatusResponse>>('/api/status');
+  const response = await client.get<ApiResponse<AppStatusResponse>>('api/status');
   return response.data;
 };
 
 export const fetchConfig = async (): Promise<ConfigResponse> => {
-  const response = await client.get<ApiResponse<ConfigResponse>>('/api/config');
+  const response = await client.get<ApiResponse<ConfigResponse>>('api/config');
   return response.data;
 };
 
 export const validateConfig = async (config: ConfigPayload): Promise<ConfigValidationResult> => {
-  const response = await client.post<ApiResponse<ConfigValidationResult>>('/api/config/validate', {
+  const response = await client.post<ApiResponse<ConfigValidationResult>>('api/config/validate', {
     config,
   });
   return response.data;
 };
 
 export const saveConfig = async (config: ConfigPayload): Promise<ConfigSaveResponse> => {
-  const response = await client.post<ApiResponse<ConfigSaveResponse>>('/api/config/save', {
+  const response = await client.post<ApiResponse<ConfigSaveResponse>>('api/config/save', {
     config,
   });
   return response.data;
 };
 
 export const restartSystem = async (): Promise<{ success: boolean }> => {
-  const response = await client.post<ApiResponse<{ success: boolean }>>('/api/system/restart');
+  const response = await client.post<ApiResponse<{ success: boolean }>>('api/system/restart');
   return response.data;
 };
 
 export const reparseLogs = async (websiteId: string): Promise<void> => {
-  await client.post<ApiResponse<{ success: boolean }>>('/api/logs/reparse', {
+  await client.post<ApiResponse<{ success: boolean }>>('api/logs/reparse', {
     id: websiteId,
   });
 };
 
 export const reparseAllLogs = async (): Promise<void> => {
-  await client.post<ApiResponse<{ success: boolean }>>('/api/logs/reparse', {
+  await client.post<ApiResponse<{ success: boolean }>>('api/logs/reparse', {
     id: '',
     migration: true,
   });
@@ -84,14 +84,14 @@ export const fetchIPGeoAnomaly = async (
   websiteId: string,
   options: { page?: number; pageSize?: number; limit?: number } = {}
 ): Promise<IPGeoAnomalyResponse> => {
-  const response = await client.get<ApiResponse<IPGeoAnomalyResponse>>('/api/ip-geo/anomaly', {
+  const response = await client.get<ApiResponse<IPGeoAnomalyResponse>>('api/ip-geo/anomaly', {
     params: buildParams({ id: websiteId, ...options }),
   });
   return response.data;
 };
 
 export const repairIPGeoAnomaly = async (websiteId: string, ips: string[]): Promise<void> => {
-  await client.post<ApiResponse<{ success: boolean }>>('/api/ip-geo/repair', {
+  await client.post<ApiResponse<{ success: boolean }>>('api/ip-geo/repair', {
     id: websiteId,
     ips,
   });
@@ -102,7 +102,7 @@ export const fetchIPGeoFailures = async (
   pageSize = 50,
   options: { websiteId?: string; reason?: string; keyword?: string } = {}
 ): Promise<IPGeoAPIFailureListResponse> => {
-  const response = await client.get<ApiResponse<IPGeoAPIFailureListResponse>>('/api/ip-geo/failures', {
+  const response = await client.get<ApiResponse<IPGeoAPIFailureListResponse>>('api/ip-geo/failures', {
     params: buildParams({
       page,
       pageSize,
@@ -119,7 +119,7 @@ export const exportIPGeoFailures = async (options: {
   reason?: string;
   keyword?: string;
 }): Promise<AxiosResponse<Blob>> => {
-  return client.get('/api/ip-geo/failures/export', {
+  return client.get('api/ip-geo/failures/export', {
     params: buildParams({
       id: options.websiteId,
       reason: options.reason,
@@ -202,7 +202,7 @@ export const fetchSystemNotifications = async (
   unreadOnly = false
 ): Promise<SystemNotificationListResponse> => {
   const response = await client.get<ApiResponse<SystemNotificationListResponse>>(
-    '/api/system/notifications',
+    'api/system/notifications',
     {
       params: buildParams({ page, pageSize, unreadOnly }),
     }
@@ -214,7 +214,7 @@ export const markSystemNotificationsRead = async (options: {
   ids?: number[];
   all?: boolean;
 }): Promise<void> => {
-  await client.post<ApiResponse<{ success: boolean }>>('/api/system/notifications/read', {
+  await client.post<ApiResponse<{ success: boolean }>>('api/system/notifications/read', {
     ids: options.ids || [],
     all: Boolean(options.all),
   });
@@ -302,7 +302,7 @@ export const fetchLogs = (
 export const exportLogs = async (
   params: Record<string, unknown> = {}
 ): Promise<AxiosResponse<Blob>> =>
-  client.get('/api/logs/export', {
+  client.get('api/logs/export', {
     params: buildParams(params),
     responseType: 'blob',
   });
@@ -310,12 +310,12 @@ export const exportLogs = async (
 export const startLogsExport = async (
   params: Record<string, unknown> = {}
 ): Promise<LogsExportStartResponse> => {
-  const response = await client.post<ApiResponse<LogsExportStartResponse>>('/api/logs/export', params);
+  const response = await client.post<ApiResponse<LogsExportStartResponse>>('api/logs/export', params);
   return response.data;
 };
 
 export const fetchLogsExportStatus = async (jobId: string): Promise<LogsExportStatusResponse> => {
-  const response = await client.get<ApiResponse<LogsExportStatusResponse>>('/api/logs/export/status', {
+  const response = await client.get<ApiResponse<LogsExportStatusResponse>>('api/logs/export/status', {
     params: buildParams({ id: jobId }),
   });
   return response.data;
@@ -326,14 +326,14 @@ export const listLogsExportJobs = async (
   page = 1,
   pageSize = 20
 ): Promise<LogsExportListResponse> => {
-  const response = await client.get<ApiResponse<LogsExportListResponse>>('/api/logs/export/list', {
+  const response = await client.get<ApiResponse<LogsExportListResponse>>('api/logs/export/list', {
     params: buildParams({ id: websiteId, page, pageSize }),
   });
   return response.data;
 };
 
 export const cancelLogsExport = async (jobId: string): Promise<{ status: string }> => {
-  const response = await client.post<ApiResponse<{ status: string }>>('/api/logs/export/cancel', {
+  const response = await client.post<ApiResponse<{ status: string }>>('api/logs/export/cancel', {
     id: jobId,
   });
   return response.data;
@@ -342,14 +342,14 @@ export const cancelLogsExport = async (jobId: string): Promise<{ status: string 
 export const retryLogsExport = async (
   jobId: string
 ): Promise<LogsExportStartResponse> => {
-  const response = await client.post<ApiResponse<LogsExportStartResponse>>('/api/logs/export/retry', {
+  const response = await client.post<ApiResponse<LogsExportStartResponse>>('api/logs/export/retry', {
     id: jobId,
   });
   return response.data;
 };
 
 export const downloadLogsExport = async (jobId: string): Promise<AxiosResponse<Blob>> =>
-  client.get('/api/logs/export/download', {
+  client.get('api/logs/export/download', {
     params: buildParams({ id: jobId }),
     responseType: 'blob',
   });

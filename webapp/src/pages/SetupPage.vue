@@ -156,10 +156,12 @@
                   <div class="setup-field-grid">
                     <div class="setup-field">
                       <label class="setup-label">{{ t('setup.fields.logType') }}</label>
-                      <input
-                        v-model.trim="site.logType"
-                        class="setup-input"
-                        type="text"
+                      <Dropdown
+                        v-model="site.logType"
+                        class="setup-dropdown"
+                        :options="logTypeOptionsFor(site.logType)"
+                        optionLabel="label"
+                        optionValue="value"
                         :placeholder="t('setup.placeholders.logType')"
                       />
                     </div>
@@ -322,31 +324,49 @@
                   <input v-model.trim="serverPort" class="setup-input" type="text" :placeholder="t('setup.placeholders.serverPort')" />
                 </div>
                 <div class="setup-field">
-                  <label class="setup-label">{{ t('setup.fields.taskInterval') }}</label>
-                  <input v-model.trim="systemDraft.taskInterval" class="setup-input" type="text" />
+                  <label class="setup-label">{{ t('setup.fields.webBasePath') }}</label>
+                  <input
+                    v-model.trim="systemDraft.webBasePath"
+                    class="setup-input"
+                    type="text"
+                    :placeholder="t('setup.placeholders.webBasePath')"
+                  />
+                  <div class="setup-hint">{{ t('setup.hints.webBasePath') }}</div>
+                  <div v-if="fieldError('system.webBasePath')" class="setup-error">
+                    {{ fieldError('system.webBasePath') }}
+                  </div>
                 </div>
               </div>
               <div class="setup-field-grid">
+                <div class="setup-field">
+                  <label class="setup-label">{{ t('setup.fields.taskInterval') }}</label>
+                  <input v-model.trim="systemDraft.taskInterval" class="setup-input" type="text" />
+                </div>
                 <div class="setup-field">
                   <label class="setup-label">{{ t('setup.fields.logRetentionDays') }}</label>
                   <input v-model.trim="systemDraft.logRetentionDays" class="setup-input" type="number" min="1" />
                 </div>
+              </div>
+              <div class="setup-field-grid">
                 <div class="setup-field">
                   <label class="setup-label">{{ t('setup.fields.parseBatchSize') }}</label>
                   <input v-model.trim="systemDraft.parseBatchSize" class="setup-input" type="number" min="1" />
                 </div>
-              </div>
-              <div class="setup-field-grid">
                 <div class="setup-field">
                   <label class="setup-label">{{ t('setup.fields.ipGeoCacheLimit') }}</label>
                   <input v-model.trim="systemDraft.ipGeoCacheLimit" class="setup-input" type="number" min="1" />
                 </div>
+              </div>
+              <div class="setup-field-grid">
                 <div class="setup-field">
                   <label class="setup-label">{{ t('setup.fields.language') }}</label>
-                  <select v-model="systemDraft.language" class="setup-select">
-                    <option value="zh-CN">中文</option>
-                    <option value="en-US">English</option>
-                  </select>
+                  <Dropdown
+                    v-model="systemDraft.language"
+                    class="setup-dropdown"
+                    :options="languageOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                  />
                 </div>
               </div>
               <div class="setup-field">
@@ -563,6 +583,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import { fetchConfig, restartSystem, saveConfig, validateConfig } from '@/api';
 import { normalizeLocale, setLocale } from '@/i18n';
 import type { ConfigPayload, FieldError, SourceConfig } from '@/api/types';
@@ -683,6 +704,7 @@ const systemDraft = reactive({
   demoMode: false,
   accessKeysText: '',
   language: 'zh-CN',
+  webBasePath: '',
 });
 const pvDraft = reactive({
   statusCodeIncludeText: '',
@@ -744,7 +766,7 @@ function createWebsiteDraft(prefillLogPath = ''): WebsiteDraft {
     name: '',
     logPath: prefillLogPath,
     domainsInput: '',
-    logType: '',
+    logType: 'nginx',
     logFormat: '',
     logRegex: '',
     logValidationStatus: 'idle',
@@ -763,6 +785,36 @@ const timeAliases = ['time', 'time_local', 'time_iso8601'];
 const statusAliases = ['status'];
 const urlAliases = ['url', 'request_uri', 'uri', 'path'];
 const requestAliases = ['request', 'request_line'];
+
+type LogTypeOption = {
+  value: string;
+  label: string;
+};
+
+const baseLogTypeOptions: LogTypeOption[] = [
+  { value: 'nginx', label: 'Nginx' },
+  { value: 'apache', label: 'Apache httpd' },
+  { value: 'haproxy', label: 'HAProxy' },
+  { value: 'traefik', label: 'Traefik' },
+  { value: 'envoy', label: 'Envoy' },
+  { value: 'tengine', label: 'Tengine' },
+  { value: 'nginx-ingress', label: 'NGINX Ingress Controller' },
+  { value: 'traefik-ingress', label: 'Traefik Ingress' },
+  { value: 'haproxy-ingress', label: 'HAProxy Ingress' },
+  { value: 'nginx-proxy-manager', label: 'Nginx Proxy Manager' },
+  { value: 'caddy', label: 'Caddy' },
+];
+
+function logTypeOptionsFor(currentValue: string) {
+  const current = currentValue.trim();
+  if (!current) {
+    return baseLogTypeOptions;
+  }
+  if (baseLogTypeOptions.some((option) => option.value === current)) {
+    return baseLogTypeOptions;
+  }
+  return [...baseLogTypeOptions, { value: current, label: `${current} (custom)` }];
+}
 
 function normalizePort(value: string) {
   const trimmed = value.trim();
@@ -1229,6 +1281,15 @@ function buildConfig(collectErrors = true): { config: ConfigPayload; errors: Fie
     errors.push({ field: 'pvFilter.excludePatterns', message: t('setup.errors.required') });
   }
 
+  const webBasePath = systemDraft.webBasePath.trim();
+  if (collectErrors && webBasePath) {
+    if (webBasePath.includes('/')) {
+      errors.push({ field: 'system.webBasePath', message: t('setup.errors.webBasePathSingleSegment') });
+    } else if (!/^[a-zA-Z0-9_-]+$/.test(webBasePath)) {
+      errors.push({ field: 'system.webBasePath', message: t('setup.errors.webBasePathInvalid') });
+    }
+  }
+
   const config: ConfigPayload = {
     websites,
     system: {
@@ -1240,6 +1301,7 @@ function buildConfig(collectErrors = true): { config: ConfigPayload; errors: Fie
       demoMode: systemDraft.demoMode,
       accessKeys: splitList(systemDraft.accessKeysText),
       language: systemDraft.language,
+      webBasePath,
     },
     server: {
       Port: normalizePort(serverPort.value),
@@ -1438,6 +1500,7 @@ function hydrateDraft(config: ConfigPayload) {
   systemDraft.demoMode = Boolean(config.system?.demoMode);
   systemDraft.accessKeysText = (config.system?.accessKeys || []).join(', ');
   systemDraft.language = config.system?.language || 'zh-CN';
+  systemDraft.webBasePath = config.system?.webBasePath || '';
 
   pvDraft.statusCodeIncludeText = (config.pvFilter?.statusCodeInclude || []).join(', ');
   pvDraft.excludePatternsText = (config.pvFilter?.excludePatterns || []).join('\n');
@@ -1447,7 +1510,7 @@ function hydrateDraft(config: ConfigPayload) {
     name: site.name || '',
     logPath: site.logPath || '',
     domainsInput: (site.domains || []).join(', '),
-    logType: site.logType || '',
+    logType: site.logType || 'nginx',
     logFormat: site.logFormat || '',
     logRegex: site.logRegex || '',
     logValidationStatus: 'idle' as LogValidationStatus,

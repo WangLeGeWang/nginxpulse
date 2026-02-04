@@ -28,7 +28,8 @@
     "ipGeoApiUrl": "http://ip-api.com/batch",
     "demoMode": false,
     "accessKeys": [],
-    "language": "zh-CN"
+    "language": "zh-CN",
+    "webBasePath": ""
   },
   "database": {
     "driver": "postgres",
@@ -65,13 +66,25 @@
 
 ## 字段详解
 
+### system 运行参数
+- `webBasePath` (string): 前端访问前缀（仅支持单段路径）。
+  - 示例：`nginxpulse` → 访问路径变为 `/nginxpulse/`，移动端为 `/nginxpulse/m/`，API 为 `/nginxpulse/api/`
+  - 为空表示使用根路径 `/`
+  - 修改后需要重启服务生效
+  - 设置后根路径 `/` 将不可访问（符合前缀隔离需求）
+
+**设计原理**
+1. **运行期可改**：通过 `/app-config.js` 下发 `window.__NGINXPULSE_BASE_PATH__`，前端路由与 API 基地址在运行期读取，无需重新构建前端。
+2. **强制前缀隔离**：服务端中间件会剥离 `/<base>` 前缀并拒绝根路径请求，API 仅允许 `/<base>/api/*` 访问。
+3. **静态资源兼容**：`/app-config.js` 与静态资源不做前缀绑定，保证资源可被前端加载。
+
 ### websites[] 站点配置
 - `name` (string, 必填): 站点名称，站点 ID 由该字段生成（改名会产生新站点）。
 - `logPath` (string, 必填): 日志路径，支持通配符 `*`。
   - 示例: `/var/log/nginx/access.log`
   - 示例: `/var/log/nginx/access_*.log`
 - `domains` (string[]): 站点域名列表。
-- `logType` (string): 日志类型，支持 `nginx`、`caddy`，默认 `nginx`。
+- `logType` (string): 日志类型，支持 `nginx`、`caddy`、`nginx-proxy-manager`（或 `npm`）、`apache`（或 `httpd`）、`haproxy`、`traefik`、`envoy`、`tengine`、`nginx-ingress`（或 `ingress-nginx`）、`traefik-ingress`、`haproxy-ingress`，默认 `nginx`。
 - `logFormat` (string): 自定义日志格式（带 `$变量`）。
 - `logRegex` (string): 自定义正则（需命名分组）。
 - `timeLayout` (string): 时间解析格式，留空走默认。

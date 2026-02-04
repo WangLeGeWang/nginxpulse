@@ -28,7 +28,8 @@
     "ipGeoApiUrl": "http://ip-api.com/batch",
     "demoMode": false,
     "accessKeys": [],
-    "language": "zh-CN"
+    "language": "zh-CN",
+    "webBasePath": ""
   },
   "database": {
     "driver": "postgres",
@@ -65,11 +66,23 @@
 
 ## Field reference
 
+### system runtime parameters
+- `webBasePath` (string): Frontend base path (single segment only).
+  - Example: `nginxpulse` → `/nginxpulse/`, mobile `/nginxpulse/m/`, API `/nginxpulse/api/`
+  - Empty means root path `/`
+  - Requires restart to take effect
+  - Root path `/` is disabled once set
+
+**Design principles**
+1. **Runtime configurable**: `window.__NGINXPULSE_BASE_PATH__` is delivered via `/app-config.js`, so frontend routing and API base are resolved at runtime without rebuilding.
+2. **Prefix isolation**: server middleware strips the `/<base>` prefix and rejects root-path requests; API is only available at `/<base>/api/*`.
+3. **Static asset compatibility**: `/app-config.js` and assets are kept accessible so the frontend can boot correctly.
+
 ### websites[]
 - `name` (string, required): site name. ID is derived from this.
 - `logPath` (string, required): log path, supports `*` glob.
 - `domains` (string[]): domain list.
-- `logType` (string): `nginx` or `caddy`, default `nginx`.
+- `logType` (string): `nginx`, `caddy`, `nginx-proxy-manager` (`npm`), `apache` (`httpd`), `haproxy`, `traefik`, `envoy`, `tengine`, `nginx-ingress` (`ingress-nginx`), `traefik-ingress`, or `haproxy-ingress`, default `nginx`.
 - `logFormat` (string): custom format with `$vars`.
 - `logRegex` (string): custom regex with named groups.
 - `timeLayout` (string): custom time layout.

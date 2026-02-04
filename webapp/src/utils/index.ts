@@ -29,3 +29,5 @@ export const getUserPreference = <T extends string>(key: string, defaultValue: T
   const saved = localStorage.getItem(key);
   return (saved || defaultValue) as T;
 };
+
+export { getMobileBasePathWithSlash, getWebBasePath, getWebBasePathWithSlash } from './base-path';

@@ -39,17 +39,6 @@ func attachWebUI(router *gin.Engine) {
 			c.Status(http.StatusNotFound)
 			return
 		}
-		if isMobileUserAgent(c.Request.UserAgent()) && requestPath != "/m" && !strings.HasPrefix(requestPath, "/m/") {
-			target := "/m" + requestPath
-			if requestPath == "/" {
-				target = "/m/"
-			}
-			if c.Request.URL.RawQuery != "" {
-				target = target + "?" + c.Request.URL.RawQuery
-			}
-			c.Redirect(http.StatusFound, target)
-			return
-		}
 		isMobile := requestPath == "/m" || strings.HasPrefix(requestPath, "/m/")
 		if isMobile {
 			if !mobileOk {
@@ -65,22 +54,6 @@ func attachWebUI(router *gin.Engine) {
 	}
 
 	router.NoRoute(serveStatic)
-}
-
-func isMobileUserAgent(ua string) bool {
-	ua = strings.ToLower(ua)
-	if ua == "" {
-		return false
-	}
-	return strings.Contains(ua, "android") ||
-		strings.Contains(ua, "iphone") ||
-		strings.Contains(ua, "ipad") ||
-		strings.Contains(ua, "ipod") ||
-		strings.Contains(ua, "mobile") ||
-		strings.Contains(ua, "windows phone") ||
-		strings.Contains(ua, "blackberry") ||
-		strings.Contains(ua, "opera mini") ||
-		strings.Contains(ua, "mobi")
 }
 
 func serveStaticFromFS(assets fs.FS, fileServer http.Handler, requestPath string, c *gin.Context) {

@@ -1,11 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { getMobileBasePathWithSlash } from '@/utils';
 import OverviewPage from '@mobile/pages/OverviewPage.vue';
 import DailyPage from '@mobile/pages/DailyPage.vue';
 import RealtimePage from '@mobile/pages/RealtimePage.vue';
 import LogsPage from '@mobile/pages/LogsPage.vue';
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(getMobileBasePathWithSlash()),
   routes: [
     {
       path: '/',

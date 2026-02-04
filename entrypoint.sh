@@ -44,6 +44,160 @@ fi
 export TMPDIR
 mkdir -p "$DATA_DIR" "$PGDATA" "$TMPDIR" "$CONFIG_DIR"
 
+normalize_web_base_path() {
+  local value
+  value="$(printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s#^/*##; s#/*$##')"
+  if [ -z "$value" ]; then
+    printf ''
+    return 0
+  fi
+  if printf '%s' "$value" | grep -q '/'; then
+    printf ''
+    return 0
+  fi
+  if ! printf '%s' "$value" | grep -Eq '^[A-Za-z0-9_-]+$'; then
+    printf ''
+    return 0
+  fi
+  case "$(printf '%s' "$value" | tr 'A-Z' 'a-z')" in
+    api|m|assets|favicon.svg|brand-mark|brand-mark.svg|app-config.js|health)
+      printf ''
+      return 0
+      ;;
+  esac
+  printf '%s' "$value"
+}
+
+extract_web_base_path() {
+  local raw=""
+  if [ -n "${WEB_BASE_PATH:-}" ]; then
+    raw="$WEB_BASE_PATH"
+  elif [ -n "${CONFIG_JSON:-}" ]; then
+    raw="$(printf '%s' "$CONFIG_JSON" | tr '\n' ' ' | sed -n 's/.*\"webBasePath\"[[:space:]]*:[[:space:]]*\"\\([^\\"]*\\)\".*/\\1/p' | head -n 1)"
+  elif [ -f "$CONFIG_DIR/nginxpulse_config.json" ]; then
+    raw="$(sed -n 's/.*\"webBasePath\"[[:space:]]*:[[:space:]]*\"\\([^\\"]*\\)\".*/\\1/p' "$CONFIG_DIR/nginxpulse_config.json" | head -n 1)"
+  fi
+  normalize_web_base_path "$raw"
+}
+
+write_app_config() {
+  local base_path="$1"
+  local prefix=""
+  if [ -n "$base_path" ]; then
+    prefix="/$base_path"
+  fi
+  printf 'window.__NGINXPULSE_BASE_PATH__ = "%s";\n' "$prefix" > /usr/share/nginx/html/app-config.js
+}
+
+write_nginx_conf() {
+  local base_path="$1"
+  local conf="/etc/nginx/conf.d/default.conf"
+  if [ -z "$base_path" ]; then
+    cat > "$conf" <<'EOF'
+server {
+  listen 8088;
+  server_name _;
+  absolute_redirect off;
+  port_in_redirect off;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  location = /app-config.js {
+    add_header Cache-Control "no-store";
+    try_files $uri =404;
+  }
+
+  location /api/ {
+    proxy_pass http://127.0.0.1:8089;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location = /m {
+    return 302 /m/;
+  }
+
+  location /m/ {
+    try_files $uri $uri/ /m/index.html;
+  }
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
+EOF
+    return 0
+  fi
+
+  cat > "$conf" <<EOF
+server {
+  listen 8088;
+  server_name _;
+  absolute_redirect off;
+  port_in_redirect off;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  location = /app-config.js {
+    add_header Cache-Control "no-store";
+    try_files \$uri =404;
+  }
+
+  location = /favicon.svg {
+    try_files \$uri =404;
+  }
+
+  location = /brand-mark.svg {
+    try_files \$uri =404;
+  }
+
+  location /assets/ {
+    try_files \$uri =404;
+  }
+
+  location /m/assets/ {
+    try_files \$uri =404;
+  }
+
+  location = /$base_path {
+    return 302 /$base_path/;
+  }
+
+  location = /$base_path/m {
+    return 302 /$base_path/m/;
+  }
+
+  location /$base_path/api/ {
+    proxy_pass http://127.0.0.1:8089;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
+
+  location /$base_path/m/ {
+    rewrite ^/$base_path/m/(.*)$ /m/\$1 break;
+    try_files \$uri \$uri/ /m/index.html;
+  }
+
+  location /$base_path/ {
+    rewrite ^/$base_path/(.*)$ /\$1 break;
+    try_files \$uri \$uri/ /index.html;
+  }
+
+  location / {
+    return 404;
+  }
+}
+EOF
+}
+
 is_mount_point() {
   awk -v target="$1" '$2==target {found=1} END {exit found?0:1}' /proc/mounts
 }
@@ -154,6 +308,10 @@ if [ "$USE_EMBEDDED_PG" = "1" ]; then
 fi
 
 if command -v nginx >/dev/null 2>&1; then
+  WEB_BASE_PATH_VALUE="$(extract_web_base_path)"
+  write_app_config "$WEB_BASE_PATH_VALUE"
+  write_nginx_conf "$WEB_BASE_PATH_VALUE"
+
   su-exec "$APP_USER:$APP_GROUP" /app/nginxpulse "$@" &
   backend_pid=$!
   nginx -g 'daemon off;' &

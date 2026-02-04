@@ -133,6 +133,30 @@ Use `scripts/dev_local.sh`:
 - 8088: Web UI
 - 8089: API
 
+## Custom frontend base path
+If you want to serve the UI under a subpath (e.g. `/nginxpulse/`), set `system.webBasePath`. Only a **single path segment** is supported. After changing it, restart the service. The root path `/` will be disabled.
+
+### Docker image (built-in Nginx)
+1. Set `webBasePath` in system config (or `WEB_BASE_PATH` env var).
+2. Restart the container. New paths:
+   - PC: `/<base>/`
+   - Mobile: `/<base>/m/`
+   - API: `/<base>/api/`
+
+The image generates Nginx config and `/app-config.js` on startup. No frontend rebuild needed.
+
+### Single binary (embedded frontend)
+1. Set `system.webBasePath` in the config file.
+2. Restart. New paths:
+   - PC: `/<base>/`
+   - Mobile: `/<base>/m/`
+   - API: `/<base>/api/`
+
+### Design principles
+1. `/app-config.js` delivers `window.__NGINXPULSE_BASE_PATH__` so the frontend resolves base path at runtime.
+2. Server middleware enforces prefix isolation; only `/<base>/...` is allowed and API is forced to `/<base>/api/*`.
+3. Static assets and `/app-config.js` stay accessible so the app can boot.
+
 ## Timezone
 The project uses system timezone for parsing.
 - Docker: mount `/etc/localtime:/etc/localtime:ro`
