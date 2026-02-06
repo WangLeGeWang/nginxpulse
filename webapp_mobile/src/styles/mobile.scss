@@ -1091,6 +1091,9 @@ body.dark-mode .device-panel .device-grid-panel {
   transform: translateX(-50%);
   --tab-indicator-x: 0px;
   --tab-indicator-w: 0px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .mobile-tabbar.van-hairline--top-bottom::after {
@@ -1120,6 +1123,16 @@ body.dark-mode .mobile-tabbar {
   position: relative;
   z-index: 1;
   padding: 2px 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.mobile-tabbar .van-tabbar-item__text,
+.mobile-tabbar .tabbar-item {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .mobile-tabbar::before {

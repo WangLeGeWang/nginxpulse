@@ -10,12 +10,6 @@
     <script src="/app-config.js"></script>
     <script>
       (function () {
-        var raw = window.__NGINXPULSE_MOBILE_PWA_ENABLED__;
-        var enabled =
-          raw === true || String(raw || '').toLowerCase() === 'true';
-        if (!enabled) {
-          return;
-        }
         var head = document.head;
         var addMeta = function (name, content) {
           var meta = document.createElement('meta');

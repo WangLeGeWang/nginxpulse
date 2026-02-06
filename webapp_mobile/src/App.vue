@@ -345,7 +345,7 @@ const languageSheetVisible = ref(false);
 const tabbarRef = ref<any>(null);
 const topMenuVisible = ref(false);
 const isPwaMode = ref(false);
-const pwaFeatureEnabled = ref(false);
+const pwaPromptEnabled = ref(false);
 const tabbarAtBottom = computed(() => (isPwaMode.value ? true : MOBILE_TABBAR_BOTTOM));
 const pwaPromptVisible = ref(false);
 const pwaGuideVisible = ref(false);
@@ -354,7 +354,12 @@ const pwaPromptMode = ref<'ios' | 'install' | 'none'>('none');
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let pwaPromptTimer: number | undefined;
 let displayModeQuery: MediaQueryList | null = null;
-const handleDisplayModeChange = () => refreshPwaMode();
+const handleDisplayModeChange = () => {
+  refreshPwaMode();
+};
+const handleVisibilityChange = () => {
+  refreshPwaMode();
+};
 
 const languageOptions = computed(() => {
   const _locale = locale.value;
@@ -516,24 +521,10 @@ const getStandaloneMode = () =>
   window.matchMedia('(display-mode: standalone)').matches ||
   (window.navigator as unknown as { standalone?: boolean }).standalone === true;
 
-const getPwaFeatureEnabled = () => {
-  const value = (window as unknown as Record<string, unknown>).__NGINXPULSE_MOBILE_PWA_ENABLED__;
-  if (typeof value === 'boolean') {
-    return value;
-  }
-  if (typeof value === 'string') {
-    return value.toLowerCase() === 'true';
-  }
-  return false;
-};
-
 const refreshPwaMode = () => {
-  pwaFeatureEnabled.value = getPwaFeatureEnabled();
-  isPwaMode.value = pwaFeatureEnabled.value && getStandaloneMode();
+  isPwaMode.value = getStandaloneMode();
   return isPwaMode.value;
 };
-
-refreshPwaMode();
 
 const isIOSDevice = () => {
   const ua = navigator.userAgent.toLowerCase();
@@ -546,10 +537,10 @@ const isSafariBrowser = () => {
 };
 
 const shouldShowPwaPrompt = () => {
-  if (!pwaFeatureEnabled.value) {
+  if (!pwaPromptEnabled.value) {
     return false;
   }
-  if (refreshPwaMode()) {
+  if (isPwaMode.value) {
     return false;
   }
   const raw = localStorage.getItem(PWA_PROMPT_DISMISS_KEY);
@@ -568,9 +559,10 @@ const markPwaPromptDismissed = () => {
   localStorage.setItem(PWA_PROMPT_DISMISS_KEY, String(Date.now()));
 };
 
-const canShowPwaPrompt = () => !setupRequired.value && !accessKeyRequired.value && pwaFeatureEnabled.value;
+const canShowPwaPrompt = () => !setupRequired.value && !accessKeyRequired.value && pwaPromptEnabled.value;
 
 const evaluatePwaPrompt = () => {
+  refreshPwaMode();
   if (!canShowPwaPrompt() || !shouldShowPwaPrompt()) {
     return;
   }
@@ -634,7 +626,7 @@ onMounted(() => {
   window.addEventListener('resize', updateTabIndicator);
   window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   window.addEventListener('appinstalled', handleAppInstalled);
-  window.addEventListener('visibilitychange', refreshPwaMode);
+  window.addEventListener('visibilitychange', handleVisibilityChange);
   if (window.matchMedia) {
     displayModeQuery = window.matchMedia('(display-mode: standalone)');
     if (displayModeQuery.addEventListener) {
@@ -654,7 +646,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateTabIndicator);
   window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   window.removeEventListener('appinstalled', handleAppInstalled);
-  window.removeEventListener('visibilitychange', refreshPwaMode);
+  window.removeEventListener('visibilitychange', handleVisibilityChange);
   if (displayModeQuery) {
     if (displayModeQuery.removeEventListener) {
       displayModeQuery.removeEventListener('change', handleDisplayModeChange);
@@ -689,7 +681,7 @@ watch([setupRequired, accessKeyRequired], () => {
   }
 });
 
-watch(pwaFeatureEnabled, (enabled) => {
+watch(pwaPromptEnabled, (enabled) => {
   if (!enabled) {
     pwaPromptVisible.value = false;
     pwaGuideVisible.value = false;
@@ -728,6 +720,7 @@ async function refreshAppStatus() {
     demoMode.value = Boolean(status.demo_mode);
     migrationRequired.value = Boolean(status.migration_required);
     setupRequired.value = Boolean(status.setup_required);
+    pwaPromptEnabled.value = Boolean(status.mobile_pwa_enabled);
     accessKeyRequired.value = false;
     accessKeyErrorKey.value = null;
     accessKeyErrorText.value = '';
@@ -735,6 +728,9 @@ async function refreshAppStatus() {
     const hasQueryLocale = getLocaleFromQuery() !== null;
     if (!hasStoredLocale && !hasQueryLocale && status.language) {
       setLocale(normalizeLocale(status.language), false);
+    }
+    if (!pwaPromptVisible.value) {
+      evaluatePwaPrompt();
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : t('common.requestFailed');

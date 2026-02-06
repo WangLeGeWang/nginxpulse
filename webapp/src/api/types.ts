@@ -18,6 +18,7 @@ export interface AppStatusResponse {
   ip_geo_progress?: number;
   ip_geo_estimated_remaining_seconds?: number;
   demo_mode?: boolean;
+  mobile_pwa_enabled?: boolean;
   language?: string;
   version?: string;
   git_commit?: string;

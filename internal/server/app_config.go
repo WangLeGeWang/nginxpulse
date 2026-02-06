@@ -10,7 +10,13 @@ import (
 
 func attachAppConfig(router *gin.Engine) {
 	router.GET("/app-config.js", func(c *gin.Context) {
-		cfg := config.ReadConfig()
+		cfg, err := config.ReadRawConfig()
+		if err != nil {
+			c.Header("Content-Type", "application/javascript; charset=utf-8")
+			c.Header("Cache-Control", "no-store")
+			c.String(http.StatusOK, "window.__NGINXPULSE_BASE_PATH__ = \"\";")
+			return
+		}
 		base := config.NormalizeWebBasePath(cfg.System.WebBasePath)
 		prefix := ""
 		if base != "" {
@@ -21,9 +27,8 @@ func attachAppConfig(router *gin.Engine) {
 		c.Header("Cache-Control", "no-store")
 		c.String(
 			http.StatusOK,
-			"window.__NGINXPULSE_BASE_PATH__ = %s;window.__NGINXPULSE_MOBILE_PWA_ENABLED__ = %t;",
+			"window.__NGINXPULSE_BASE_PATH__ = %s;",
 			payload,
-			cfg.System.MobilePWAEnabled,
 		)
 	})
 }
