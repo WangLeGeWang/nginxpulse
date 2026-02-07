@@ -61,6 +61,7 @@ Source repository: https://github.com/likaia/nginxpulse
 ### 1) Docker
 Single image (frontend Nginx + backend service):
 > The image includes PostgreSQL and initializes the database on startup (when you do not provide your own database). **You must mount the data directories**: `/app/var/nginxpulse_data` and `/app/var/pgdata`. Without these mounts, the container exits with an error.
+> If you plan to configure an external database in the **setup wizard**, you can skip mounting `pgdata` for the first boot; restart the container after saving the config.
 
 One-click start (minimal config, first launch opens the setup wizard):
 
@@ -228,7 +229,8 @@ chown -R 1000:1000 /path/to/nginxpulse_data /path/to/pgdata
 chmod -R u+rx /path/to/logs
 ```
 
-If you use an external database (`DB_DSN`), you can skip mounting `pgdata`.
+If you use an external database (`DB_DSN`), you can skip mounting `pgdata`. **PostgreSQL 16 is recommended** for external deployments.
+If the external database is configured via the **setup wizard**, you can also skip `pgdata` and restart the container after saving the config.
 
 SELinux note (RHEL/CentOS/Fedora):
 - These systems enable SELinux by default. Docker volumes may be visible but still inaccessible due to labels.

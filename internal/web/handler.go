@@ -162,6 +162,9 @@ func SetupRoutes(
 		defaultLogPath := ""
 		if config.IsSetupMode() {
 			defaultLogPath = config.SuggestDefaultLogPath()
+			if strings.TrimSpace(cfg.Database.DSN) == "" {
+				cfg.Database.DSN = buildEmbeddedPostgresDSN()
+			}
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"config":           cfg,
@@ -960,4 +963,25 @@ func markPGMigrationDone() error {
 		return err
 	}
 	return nil
+}
+
+func buildEmbeddedPostgresDSN() string {
+	user := envWithDefault("POSTGRES_USER", "nginxpulse")
+	password := envWithDefault("POSTGRES_PASSWORD", "nginxpulse")
+	host := envWithDefault("POSTGRES_CONNECT_HOST", "127.0.0.1")
+	port := envWithDefault("POSTGRES_PORT", "5432")
+	database := envWithDefault("POSTGRES_DB", "nginxpulse")
+
+	return fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		user, password, host, port, database,
+	)
+}
+
+func envWithDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
 }

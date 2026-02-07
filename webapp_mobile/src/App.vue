@@ -353,7 +353,8 @@ const pwaPromptMode = ref<'ios' | 'install' | 'none'>('none');
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let pwaPromptTimer: number | undefined;
-let displayModeQuery: MediaQueryList | null = null;
+const displayModeQueries: MediaQueryList[] = [];
+const PWA_DISPLAY_MODES = ['standalone', 'fullscreen', 'minimal-ui', 'window-controls-overlay'] as const;
 const handleDisplayModeChange = () => {
   refreshPwaMode();
 };
@@ -517,9 +518,20 @@ const applyUiTokens = () => {
   root.style.setProperty('--metric-tint-alpha-dark', String(METRIC_TINT_ALPHA_DARK));
 };
 
-const getStandaloneMode = () =>
-  window.matchMedia('(display-mode: standalone)').matches ||
-  (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+const getStandaloneMode = () => {
+  if (window.matchMedia) {
+    for (const mode of PWA_DISPLAY_MODES) {
+      if (window.matchMedia(`(display-mode: ${mode})`).matches) {
+        return true;
+      }
+    }
+  }
+  if ((window.navigator as unknown as { standalone?: boolean }).standalone === true) {
+    return true;
+  }
+  const referrer = document.referrer || '';
+  return referrer.startsWith('android-app://');
+};
 
 const refreshPwaMode = () => {
   isPwaMode.value = getStandaloneMode();
@@ -628,11 +640,14 @@ onMounted(() => {
   window.addEventListener('appinstalled', handleAppInstalled);
   window.addEventListener('visibilitychange', handleVisibilityChange);
   if (window.matchMedia) {
-    displayModeQuery = window.matchMedia('(display-mode: standalone)');
-    if (displayModeQuery.addEventListener) {
-      displayModeQuery.addEventListener('change', handleDisplayModeChange);
-    } else if (displayModeQuery.addListener) {
-      displayModeQuery.addListener(handleDisplayModeChange);
+    for (const mode of PWA_DISPLAY_MODES) {
+      const query = window.matchMedia(`(display-mode: ${mode})`);
+      displayModeQueries.push(query);
+      if (query.addEventListener) {
+        query.addEventListener('change', handleDisplayModeChange);
+      } else if (query.addListener) {
+        query.addListener(handleDisplayModeChange);
+      }
     }
   }
   nextTick(updateTabIndicator);
@@ -647,12 +662,14 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   window.removeEventListener('appinstalled', handleAppInstalled);
   window.removeEventListener('visibilitychange', handleVisibilityChange);
-  if (displayModeQuery) {
-    if (displayModeQuery.removeEventListener) {
-      displayModeQuery.removeEventListener('change', handleDisplayModeChange);
-    } else if (displayModeQuery.removeListener) {
-      displayModeQuery.removeListener(handleDisplayModeChange);
-    }
+  if (displayModeQueries.length) {
+    displayModeQueries.forEach((query) => {
+      if (query.removeEventListener) {
+        query.removeEventListener('change', handleDisplayModeChange);
+      } else if (query.removeListener) {
+        query.removeListener(handleDisplayModeChange);
+      }
+    });
   }
   if (pwaPromptTimer) {
     window.clearTimeout(pwaPromptTimer);

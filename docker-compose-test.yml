@@ -1,0 +1,14 @@
+services:
+  nginxpulse:
+    image: magiccoders/nginxpulse:v1.6.11-beta.7
+    container_name: local_nginxpulse
+    ports:
+      - "9122:8088"
+      - "8089:8089"
+    volumes:
+      - ./docker_local/pgdata:/app/var/pgdata
+      - ./docker_local/logs:/share/logs
+      - ./docker_local/nginxpulse_data:/app/var/nginxpulse_data
+      - ./docker_local/configs:/app/configs
+      - /etc/localtime:/etc/localtime
+    restart: unless-stopped

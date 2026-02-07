@@ -44,6 +44,137 @@ fi
 export TMPDIR
 mkdir -p "$DATA_DIR" "$PGDATA" "$TMPDIR" "$CONFIG_DIR"
 
+is_truthy() {
+  case "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in
+    1|true|yes|on)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+has_env_config_source() {
+  [ -n "${CONFIG_JSON:-}" ] || [ -n "${WEBSITES:-}" ]
+}
+
+is_setup_mode() {
+  if is_truthy "${FORCE_SETUP_UI:-}"; then
+    return 0
+  fi
+  if is_truthy "${FORCE_EMPTY_CONFIG:-}"; then
+    return 0
+  fi
+  if has_env_config_source; then
+    return 1
+  fi
+  if [ -f "$CONFIG_DIR/nginxpulse_config.json" ]; then
+    return 1
+  fi
+  return 0
+}
+
+extract_db_dsn_from_config() {
+  local raw=""
+  if [ -n "${CONFIG_JSON:-}" ]; then
+    raw="$(printf '%s' "$CONFIG_JSON" | tr '\n' ' ' | awk -F'"' '/"dsn"[[:space:]]*:/ {print $4; exit}')"
+  elif [ -f "$CONFIG_DIR/nginxpulse_config.json" ]; then
+    raw="$(awk -F'"' '/"dsn"[[:space:]]*:/ {print $4; exit}' "$CONFIG_DIR/nginxpulse_config.json")"
+  fi
+  printf '%s' "$raw"
+}
+
+extract_dsn_host() {
+  local dsn="$1"
+  local host=""
+  if printf '%s' "$dsn" | grep -qi 'host='; then
+    host="$(printf '%s' "$dsn" | sed -n 's/.*host=\\([^ ]*\\).*/\\1/p' | head -n 1)"
+  fi
+  if [ -z "$host" ]; then
+    host="$(printf '%s' "$dsn" | sed -n 's#^[A-Za-z0-9+.-]*://##p' | sed 's#^[^@]*@##' | sed 's#[/?].*$##' | sed 's#:.*$##' | head -n 1)"
+  fi
+  host="$(printf '%s' "$host" | sed 's/^\\[//; s/\\]$//')"
+  printf '%s' "$host"
+}
+
+extract_dsn_port() {
+  local dsn="$1"
+  local port=""
+  if printf '%s' "$dsn" | grep -qi 'port='; then
+    port="$(printf '%s' "$dsn" | sed -n 's/.*port=\\([0-9][0-9]*\\).*/\\1/p' | head -n 1)"
+  fi
+  if [ -z "$port" ]; then
+    port="$(printf '%s' "$dsn" | sed -n 's#^[A-Za-z0-9+.-]*://##p' | sed 's#^[^@]*@##' | sed 's#[/?].*$##' | sed -n 's#.*:\\([0-9][0-9]*\\)$#\\1#p' | head -n 1)"
+  fi
+  if [ -z "$port" ]; then
+    port="5432"
+  fi
+  printf '%s' "$port"
+}
+
+is_loopback_host() {
+  case "$1" in
+    ""|localhost|127.0.0.1|::1)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+is_external_dsn() {
+  local host
+  host="$(extract_dsn_host "$1")"
+  if [ -z "$host" ]; then
+    return 1
+  fi
+  if is_loopback_host "$host"; then
+    return 1
+  fi
+  return 0
+}
+
+if [ "$USE_EMBEDDED_PG" = "1" ]; then
+  CONFIG_DSN="$(extract_db_dsn_from_config)"
+  if [ -n "$CONFIG_DSN" ] && is_external_dsn "$CONFIG_DSN"; then
+    USE_EMBEDDED_PG=0
+  fi
+fi
+
+if is_setup_mode; then
+  USE_EMBEDDED_PG=0
+fi
+
+if [ "$USE_EMBEDDED_PG" = "1" ]; then
+  EFFECTIVE_DSN="${DB_DSN:-$CONFIG_DSN}"
+  if [ -n "$EFFECTIVE_DSN" ] && command -v pg_isready >/dev/null 2>&1; then
+    DSN_HOST="$(extract_dsn_host "$EFFECTIVE_DSN")"
+    DSN_PORT="$(extract_dsn_port "$EFFECTIVE_DSN")"
+    if [ -n "$DSN_HOST" ]; then
+      if pg_isready -h "$DSN_HOST" -p "$DSN_PORT" >/dev/null 2>&1; then
+        pg_ready=0
+      else
+        pg_ready=$?
+      fi
+      if [ "$pg_ready" -eq 0 ] || [ "$pg_ready" -eq 1 ]; then
+        USE_EMBEDDED_PG=0
+      fi
+    fi
+  fi
+fi
+
+EFFECTIVE_DSN="${DB_DSN:-$CONFIG_DSN}"
+if [ "$USE_EMBEDDED_PG" = "1" ]; then
+  echo "nginxpulse: use external postgres: no (using embedded postgres)"
+elif [ -n "$EFFECTIVE_DSN" ]; then
+  EFFECTIVE_DB_HOST="$(extract_dsn_host "$EFFECTIVE_DSN")"
+  if [ -n "$EFFECTIVE_DB_HOST" ]; then
+    echo "nginxpulse: use external postgres: yes (host=$EFFECTIVE_DB_HOST)"
+  else
+    echo "nginxpulse: use external postgres: yes"
+  fi
+else
+  echo "nginxpulse: use external postgres: no (setup mode; database not configured yet)"
+fi
+
 normalize_web_base_path() {
   local value
   value="$(printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s#^/*##; s#/*$##')"
@@ -293,7 +424,7 @@ ensure_database() {
   fi
 }
 
-if [ -z "${DB_DSN:-}" ]; then
+if [ "$USE_EMBEDDED_PG" = "1" ] && [ -z "${DB_DSN:-}" ]; then
   export DB_DRIVER="postgres"
   export DB_DSN="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONNECT_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable"
 fi

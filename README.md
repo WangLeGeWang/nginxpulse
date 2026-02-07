@@ -59,6 +59,7 @@
 ### 1) Docker
 单镜像（前端 Nginx + 后端服务）：
 > 镜像内置 PostgreSQL，启动时会自动初始化数据库（未自备数据库时）。**必须挂载数据目录**：`/app/var/nginxpulse_data` 与 `/app/var/pgdata`。未挂载时容器会直接退出并报错。
+> 如果你准备在**初始化向导**里配置外部数据库，可先不挂载 `pgdata`，容器能正常启动；配置完成后重启容器即可生效。
 
 一键启动（极简配置，首次启动进入初始化向导）：
 
@@ -229,7 +230,8 @@ chown -R 1000:1000 /path/to/nginxpulse_data /path/to/pgdata
 chmod -R u+rx /path/to/logs
 ```
 
-如果你使用外部数据库（设置 `DB_DSN`），可以不挂载 `pgdata`。
+如果你使用外部数据库（设置 `DB_DSN`），可以不挂载 `pgdata`。外置 PG **推荐使用 16 版本**。
+若你通过**初始化向导**配置外部数据库，同样可以不挂载 `pgdata`，保存后重启容器生效。
 
 SELinux 说明（RHEL/CentOS/Fedora 等）：
 - 这些系统默认启用 SELinux，Docker 挂载目录可能因安全上下文导致“看得见但不可访问”。
