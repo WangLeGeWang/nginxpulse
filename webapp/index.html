@@ -49,12 +49,6 @@
           var ua = (navigator.userAgent || '').toLowerCase();
           isMobile = /android|iphone|ipad|ipod|mobile|windows phone|blackberry|opera mini|mobi/.test(ua);
         }
-        if (!isMobile) {
-          var minSide = Math.min(window.innerWidth || 0, window.innerHeight || 0);
-          if (minSide > 0 && minSide <= 900) {
-            isMobile = true;
-          }
-        }
         if (!isMobile && view !== 'mobile') {
           return;
         }
