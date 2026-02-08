@@ -84,6 +84,7 @@ On mobile (`/m/`), you can temporarily override navigation position via URL quer
 - Priority: `tabbarBottom` overrides `tabbar`.
 - Truthy values (bottom tabbar): `1`, `true`, `yes`, `on`, `bottom`.
 - Falsy values (top navigation): `0`, `false`, `no`, `off`, `top`.
+- When one of these URL params is present, the choice is persisted to local storage and remains effective across in-app navigation.
 - Without parameters, default behavior applies (PWA defaults to bottom tabbar; non-PWA follows frontend default config).
 
 Examples:

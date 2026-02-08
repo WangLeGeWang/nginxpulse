@@ -321,6 +321,7 @@ const ACCESS_KEY_STORAGE = 'nginxpulse_access_key';
 const ACCESS_KEY_EVENT = 'nginxpulse:access-key-required';
 const PWA_PROMPT_DISMISS_KEY = 'nginxpulse_pwa_prompt_dismissed_at';
 const PWA_PROMPT_THROTTLE_DAYS = 14;
+const TABBAR_OVERRIDE_STORAGE_KEY = 'nginxpulse_mobile_tabbar_bottom_override';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -346,6 +347,7 @@ const tabbarRef = ref<any>(null);
 const topMenuVisible = ref(false);
 const isPwaMode = ref(false);
 const pwaPromptEnabled = ref(false);
+const tabbarStoredOverride = ref<boolean | null>(readTabbarOverrideStorage());
 const tabbarQueryOverride = computed<boolean | null>(() => {
   const byTabbarBottom = parseTabbarQueryOverride(route.query.tabbarBottom);
   if (byTabbarBottom !== null) {
@@ -356,6 +358,9 @@ const tabbarQueryOverride = computed<boolean | null>(() => {
 const tabbarAtBottom = computed(() => {
   if (tabbarQueryOverride.value !== null) {
     return tabbarQueryOverride.value;
+  }
+  if (tabbarStoredOverride.value !== null) {
+    return tabbarStoredOverride.value;
   }
   return isPwaMode.value ? true : MOBILE_TABBAR_BOTTOM;
 });
@@ -530,7 +535,7 @@ const applyUiTokens = () => {
   root.style.setProperty('--metric-tint-alpha-dark', String(METRIC_TINT_ALPHA_DARK));
 };
 
-const parseTabbarQueryOverride = (value: unknown): boolean | null => {
+function parseTabbarQueryOverride(value: unknown): boolean | null {
   const raw = Array.isArray(value) ? value[value.length - 1] : value;
   if (raw === undefined || raw === null) {
     return null;
@@ -550,7 +555,23 @@ const parseTabbarQueryOverride = (value: unknown): boolean | null => {
   }
 
   return null;
-};
+}
+
+function readTabbarOverrideStorage(): boolean | null {
+  try {
+    return parseTabbarQueryOverride(localStorage.getItem(TABBAR_OVERRIDE_STORAGE_KEY));
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeTabbarOverrideStorage(value: boolean) {
+  try {
+    localStorage.setItem(TABBAR_OVERRIDE_STORAGE_KEY, value ? '1' : '0');
+  } catch (error) {
+    // ignore storage write errors
+  }
+}
 
 const getStandaloneMode = () => {
   if (window.matchMedia) {
@@ -717,6 +738,14 @@ watch(isDark, (value) => {
 watch([activeTabIndex, setupRequired], () => {
   nextTick(updateTabIndicator);
 });
+
+watch(tabbarQueryOverride, (value) => {
+  if (value === null) {
+    return;
+  }
+  tabbarStoredOverride.value = value;
+  writeTabbarOverrideStorage(value);
+}, { immediate: true });
 
 watch(tabbarAtBottom, () => {
   nextTick(updateTabIndicator);
