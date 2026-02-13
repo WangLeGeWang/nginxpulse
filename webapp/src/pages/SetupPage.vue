@@ -1448,6 +1448,7 @@ async function saveAll() {
     return;
   }
   const { config } = buildConfig(false);
+  const redirectPath = buildWebRootPath(config.system?.webBasePath || '');
   saving.value = true;
   saveError.value = '';
   try {
@@ -1459,7 +1460,7 @@ async function saveAll() {
       } catch (err) {
         console.warn('触发重启失败:', err);
       }
-      startAutoRefresh();
+      startAutoRefresh(redirectPath);
     }
   } catch (err) {
     saveError.value = err instanceof Error ? err.message : t('common.requestFailed');
@@ -1496,7 +1497,7 @@ async function copyConfig() {
   }, 2000);
 }
 
-function startAutoRefresh() {
+function startAutoRefresh(redirectPath = '/') {
   if (autoRefreshTimer) {
     window.clearInterval(autoRefreshTimer);
   }
@@ -1506,9 +1507,14 @@ function startAutoRefresh() {
     if (autoRefreshSeconds.value <= 0) {
       window.clearInterval(autoRefreshTimer as number);
       autoRefreshTimer = null;
-      window.location.assign('/');
+      window.location.assign(redirectPath);
     }
   }, 1000);
+}
+
+function buildWebRootPath(basePath: string) {
+  const normalized = basePath.trim().replace(/^\/+|\/+$/g, '');
+  return normalized ? `/${normalized}/` : '/';
 }
 
 async function loadConfig() {
