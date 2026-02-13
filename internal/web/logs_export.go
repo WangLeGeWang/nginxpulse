@@ -19,7 +19,7 @@ const (
 	logsExportSheetName = "Logs"
 	logsHeaderRow       = 3
 	logsDataStartRow    = 4
-	logsLastColumn      = "K"
+	logsLastColumn      = "L"
 )
 
 var ErrExportCanceled = fmt.Errorf("export canceled")
@@ -134,7 +134,7 @@ func exportLogsXLSXWithProgress(
 				}
 			}
 			if log.PageviewFlag {
-				pvCell := fmt.Sprintf("K%d", currentRow)
+				pvCell := fmt.Sprintf("L%d", currentRow)
 				if err := file.SetCellStyle(logsExportSheetName, pvCell, pvCell, styles.pvYes); err != nil {
 					return err
 				}
@@ -213,19 +213,22 @@ func setupLogsExportSheet(file *excelize.File, query analytics.StatsQuery, lang 
 	if err := file.SetColWidth(logsExportSheetName, "F", "F", 14); err != nil {
 		return err
 	}
-	if err := file.SetColWidth(logsExportSheetName, "G", "G", 30); err != nil {
+	if err := file.SetColWidth(logsExportSheetName, "G", "G", 14); err != nil {
 		return err
 	}
-	if err := file.SetColWidth(logsExportSheetName, "H", "H", 20); err != nil {
+	if err := file.SetColWidth(logsExportSheetName, "H", "H", 30); err != nil {
 		return err
 	}
-	if err := file.SetColWidth(logsExportSheetName, "I", "I", 18); err != nil {
+	if err := file.SetColWidth(logsExportSheetName, "I", "I", 20); err != nil {
 		return err
 	}
-	if err := file.SetColWidth(logsExportSheetName, "J", "J", 14); err != nil {
+	if err := file.SetColWidth(logsExportSheetName, "J", "J", 18); err != nil {
 		return err
 	}
-	if err := file.SetColWidth(logsExportSheetName, "K", "K", 10); err != nil {
+	if err := file.SetColWidth(logsExportSheetName, "K", "K", 14); err != nil {
+		return err
+	}
+	if err := file.SetColWidth(logsExportSheetName, "L", "L", 10); err != nil {
 		return err
 	}
 
@@ -421,6 +424,7 @@ func buildLogExportRow(log analytics.LogEntry, lang string) []string {
 		requestText,
 		strconv.Itoa(log.StatusCode),
 		strconv.FormatInt(int64(log.BytesSent), 10),
+		formatTraffic(int64(log.BytesSent)),
 		referer,
 		browser,
 		os,
@@ -432,7 +436,11 @@ func buildLogExportRow(log analytics.LogEntry, lang string) []string {
 func buildLogExportRowValues(log analytics.LogEntry, lang string) []interface{} {
 	row := buildLogExportRow(log, lang)
 	values := make([]interface{}, 0, len(row))
-	for _, value := range row {
+	for idx, value := range row {
+		if idx == 5 {
+			values = append(values, int64(log.BytesSent))
+			continue
+		}
 		values = append(values, value)
 	}
 	return values
@@ -446,7 +454,8 @@ func logsExportHeaders(lang string) []string {
 			"Location",
 			"Request",
 			"Status",
-			"Bytes",
+			"Bytes (Raw)",
+			"Traffic",
 			"Referer",
 			"Browser",
 			"OS",
@@ -460,13 +469,30 @@ func logsExportHeaders(lang string) []string {
 		"位置",
 		"请求",
 		"状态码",
-		"流量",
+		"流量(字节)",
+		"流量(可读)",
 		"来源",
 		"浏览器",
 		"系统",
 		"设备",
 		"PV",
 	}
+}
+
+func formatTraffic(bytes int64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%.2f B", float64(bytes))
+	}
+	if bytes < 1024*1024 {
+		return fmt.Sprintf("%.2f KB", float64(bytes)/1024)
+	}
+	if bytes < 1024*1024*1024 {
+		return fmt.Sprintf("%.2f MB", float64(bytes)/(1024*1024))
+	}
+	if bytes < 1024*1024*1024*1024 {
+		return fmt.Sprintf("%.2f GB", float64(bytes)/(1024*1024*1024))
+	}
+	return fmt.Sprintf("%.2f TB", float64(bytes)/(1024*1024*1024*1024))
 }
 
 func logsExportWebsiteRow(query analytics.StatsQuery, lang string) []string {
