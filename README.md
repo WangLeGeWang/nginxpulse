@@ -337,6 +337,10 @@ nginxpulse: initializing postgres data dir at /app/var/pgdata
   <img src="https://raw.githubusercontent.com/likaia/nginxpulse/main/docs/thanks/supporter-3.png" width="60" height="60" alt="supporter-3" />
   <img src="https://raw.githubusercontent.com/likaia/nginxpulse/main/docs/thanks/supporter-4.png" width="60" height="60" alt="supporter-4" />
   <img src="https://raw.githubusercontent.com/likaia/nginxpulse/main/docs/thanks/supporter-5.png" width="60" height="60" alt="supporter-5" />
+  <img src="https://raw.githubusercontent.com/likaia/nginxpulse/main/docs/thanks/supporter-6.png" width="60" height="60" alt="supporter-6" />
+  <img src="https://raw.githubusercontent.com/likaia/nginxpulse/main/docs/thanks/supporter-7.png" width="60" height="60" alt="supporter-7" />
+  <img src="https://raw.githubusercontent.com/likaia/nginxpulse/main/docs/thanks/supporter-8.png" width="60" height="60" alt="supporter-8" />
+  <img src="https://raw.githubusercontent.com/likaia/nginxpulse/main/docs/thanks/supporter-9.png" width="60" height="60" alt="supporter-9" />
 </p>
 
 ## 写在最后
