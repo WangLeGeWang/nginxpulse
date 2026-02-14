@@ -150,6 +150,53 @@ func SetupRoutes(
 		})
 	})
 
+	router.POST("/api/system/notifications/clear", func(c *gin.Context) {
+		if statsFactory == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "初始化模式暂不支持系统通知",
+			})
+			return
+		}
+		type clearRequest struct {
+			IDs []int64 `json:"ids"`
+			All bool    `json:"all"`
+		}
+		var req clearRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "请求参数错误",
+			})
+			return
+		}
+		if !req.All && len(req.IDs) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "缺少清理目标",
+			})
+			return
+		}
+		repo := statsFactory.Repo()
+		var (
+			deleted int64
+			err     error
+		)
+		if req.All {
+			deleted, err = repo.DeleteAllSystemNotifications()
+		} else {
+			deleted, err = repo.DeleteSystemNotifications(req.IDs)
+		}
+		if err != nil {
+			logrus.WithError(err).Error("清理系统通知失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("清理系统通知失败: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"deleted": deleted,
+		})
+	})
+
 	router.GET("/api/config", func(c *gin.Context) {
 		cfg, err := config.ReadRawConfig()
 		if err != nil {
@@ -396,6 +443,47 @@ func SetupRoutes(
 		c.Header("Content-Type", "text/csv; charset=utf-8")
 		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 		c.String(http.StatusOK, buffer.String())
+	})
+
+	router.POST("/api/ip-geo/failures/clear", func(c *gin.Context) {
+		if statsFactory == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "初始化模式暂不支持失败记录",
+			})
+			return
+		}
+		type clearRequest struct {
+			ID        string `json:"id"`
+			WebsiteID string `json:"websiteId"`
+			Reason    string `json:"reason"`
+			Keyword   string `json:"keyword"`
+		}
+		var req clearRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "请求参数错误",
+			})
+			return
+		}
+		websiteID := strings.TrimSpace(req.ID)
+		if websiteID == "" {
+			websiteID = strings.TrimSpace(req.WebsiteID)
+		}
+		reason := strings.TrimSpace(req.Reason)
+		keyword := strings.TrimSpace(req.Keyword)
+		repo := statsFactory.Repo()
+		deleted, err := repo.ClearIPGeoAPIFailuresFiltered(websiteID, reason, keyword)
+		if err != nil {
+			logrus.WithError(err).Error("清理 IP 归属地失败记录失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("清理失败记录失败: %v", err),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"deleted": deleted,
+		})
 	})
 
 	router.GET("/api/logs/export", func(c *gin.Context) {

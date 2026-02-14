@@ -112,6 +112,22 @@ export const exportIPGeoFailures = async (options: {
   });
 };
 
+export const clearIPGeoFailures = async (options: {
+  websiteId?: string;
+  reason?: string;
+  keyword?: string;
+}): Promise<{ success: boolean; deleted: number }> => {
+  const response = await client.post<ApiResponse<{ success: boolean; deleted: number }>>(
+    'api/ip-geo/failures/clear',
+    {
+      id: options.websiteId || '',
+      reason: options.reason || '',
+      keyword: options.keyword || '',
+    }
+  );
+  return response.data;
+};
+
 const fetchStats = async <T>(type: string, params: Record<string, unknown> = {}): Promise<T> => {
   const response = await client.get<ApiResponse<T>>(`/api/stats/${type}`, {
     params: buildParams(params),
@@ -214,6 +230,20 @@ export const markSystemNotificationsRead = async (options: {
     ids: options.ids || [],
     all: Boolean(options.all),
   });
+};
+
+export const clearSystemNotifications = async (options: {
+  ids?: number[];
+  all?: boolean;
+}): Promise<{ success: boolean; deleted: number }> => {
+  const response = await client.post<ApiResponse<{ success: boolean; deleted: number }>>(
+    'api/system/notifications/clear',
+    {
+      ids: options.ids || [],
+      all: Boolean(options.all),
+    }
+  );
+  return response.data;
 };
 
 export const fetchLogs = (

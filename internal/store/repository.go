@@ -680,6 +680,51 @@ func (r *Repository) ListIPGeoAPIFailuresFiltered(
 	return failures, hasMore, nil
 }
 
+func (r *Repository) ClearIPGeoAPIFailuresFiltered(websiteID, reason, keyword string) (int64, error) {
+	whereParts := make([]string, 0, 3)
+	args := make([]interface{}, 0, 3)
+
+	websiteID = strings.TrimSpace(websiteID)
+	if websiteID != "" {
+		ipTable := fmt.Sprintf("%s_dim_ip", websiteID)
+		exists, err := r.tableExists(ipTable)
+		if err != nil {
+			return 0, err
+		}
+		if !exists {
+			return 0, nil
+		}
+		whereParts = append(
+			whereParts,
+			fmt.Sprintf(`EXISTS (SELECT 1 FROM "%s" AS ip WHERE ip.ip = f.ip)`, ipTable),
+		)
+	}
+
+	reason = strings.TrimSpace(reason)
+	if reason != "" {
+		whereParts = append(whereParts, "f.reason = ?")
+		args = append(args, reason)
+	}
+
+	keyword = strings.TrimSpace(keyword)
+	if keyword != "" {
+		whereParts = append(whereParts, "f.ip ILIKE ?")
+		args = append(args, "%"+keyword+"%")
+	}
+
+	query := `DELETE FROM "ip_geo_api_failures" AS f`
+	if len(whereParts) > 0 {
+		query += " WHERE " + strings.Join(whereParts, " AND ")
+	}
+
+	result, err := r.db.Exec(sqlutil.ReplacePlaceholders(query), args...)
+	if err != nil {
+		return 0, err
+	}
+	rows, _ := result.RowsAffected()
+	return rows, nil
+}
+
 func (r *Repository) CreateSystemNotification(entry SystemNotification) (int64, error) {
 	level := strings.TrimSpace(entry.Level)
 	category := strings.TrimSpace(entry.Category)
@@ -900,6 +945,44 @@ func (r *Repository) MarkSystemNotificationsRead(ids []int64) error {
 func (r *Repository) MarkAllSystemNotificationsRead() error {
 	_, err := r.db.Exec(`UPDATE "system_notifications" SET read_at = NOW() WHERE read_at IS NULL`)
 	return err
+}
+
+func (r *Repository) DeleteSystemNotifications(ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	values := make([]string, 0, len(ids))
+	args := make([]interface{}, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		values = append(values, "?")
+		args = append(args, id)
+	}
+	if len(values) == 0 {
+		return 0, nil
+	}
+	query := fmt.Sprintf(
+		`DELETE FROM "system_notifications"
+         WHERE id IN (%s)`,
+		strings.Join(values, ","),
+	)
+	result, err := r.db.Exec(sqlutil.ReplacePlaceholders(query), args...)
+	if err != nil {
+		return 0, err
+	}
+	rows, _ := result.RowsAffected()
+	return rows, nil
+}
+
+func (r *Repository) DeleteAllSystemNotifications() (int64, error) {
+	result, err := r.db.Exec(`DELETE FROM "system_notifications"`)
+	if err != nil {
+		return 0, err
+	}
+	rows, _ := result.RowsAffected()
+	return rows, nil
 }
 
 func (r *Repository) GetSystemNotificationUnreadCount() (int64, error) {

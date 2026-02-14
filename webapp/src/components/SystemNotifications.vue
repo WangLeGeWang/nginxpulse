@@ -63,21 +63,33 @@
           {{ loadingMore ? t('common.loading') : t('notifications.loadMore') }}
         </button>
       </div>
-      <div class="system-notice-actions">
-        <Button
-          outlined
-          class="system-notice-action"
-          :label="t('notifications.failureTitle')"
-          @click="openFailureDialog"
-        />
-        <Button
-          outlined
-          class="system-notice-action"
-          :label="t('notifications.markAllRead')"
-          :disabled="unreadCount === 0 || loading"
-          @click="markAllRead"
-        />
-        <Button class="system-notice-action" :label="t('common.close')" @click="dialogVisible = false" />
+      <div class="system-dialog-actions">
+        <div class="system-dialog-actions-left">
+          <Button
+            outlined
+            class="system-notice-action"
+            :label="t('notifications.failureTitle')"
+            @click="openFailureDialog"
+          />
+        </div>
+        <div class="system-dialog-actions-right">
+          <Button
+            outlined
+            severity="danger"
+            class="system-notice-action"
+            :label="t('notifications.clear')"
+            :disabled="notificationsClearing || loading"
+            @click="clearNotifications"
+          />
+          <Button
+            outlined
+            class="system-notice-action"
+            :label="t('notifications.markAllRead')"
+            :disabled="unreadCount === 0 || loading"
+            @click="markAllRead"
+          />
+          <Button class="system-notice-action" :label="t('common.close')" @click="dialogVisible = false" />
+        </div>
       </div>
     </Dialog>
 
@@ -119,13 +131,6 @@
             :label="t('common.reset')"
             @click="resetFailureFilters"
           />
-          <Button
-            outlined
-            class="system-failure-action"
-            :label="t('notifications.export')"
-            :disabled="failureExporting"
-            @click="exportFailures"
-          />
         </div>
         <div v-if="failureLoading" class="system-notice-loading">{{ t('common.loading') }}</div>
         <div v-else-if="failures.length === 0" class="system-notice-empty">
@@ -153,8 +158,57 @@
           {{ failureLoadingMore ? t('common.loading') : t('notifications.loadMore') }}
         </button>
       </div>
-      <div class="system-notice-actions">
-        <Button class="system-notice-action" :label="t('common.close')" @click="failureDialogVisible = false" />
+      <div class="system-dialog-actions">
+        <div class="system-dialog-actions-left">
+          <Button
+            outlined
+            class="system-notice-action"
+            :label="t('notifications.export')"
+            :disabled="failureExporting"
+            @click="exportFailures"
+          />
+          <Button
+            outlined
+            severity="danger"
+            class="system-notice-action"
+            :label="t('notifications.clear')"
+            :disabled="failureClearing || failureLoading"
+            @click="clearFailures"
+          />
+        </div>
+        <div class="system-dialog-actions-right">
+          <Button class="system-notice-action" :label="t('common.close')" @click="failureDialogVisible = false" />
+        </div>
+      </div>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="confirmDialogVisible"
+      :header="t('notifications.clearConfirmTitle')"
+      modal
+      :draggable="false"
+      :closable="!confirmDialogLoading"
+      class="system-confirm-dialog"
+      @hide="resetConfirmDialogState"
+    >
+      <div class="system-confirm-content">
+        <i class="ri-alert-line" aria-hidden="true"></i>
+        <p>{{ confirmDialogMessage }}</p>
+      </div>
+      <div class="system-confirm-actions">
+        <Button
+          outlined
+          :label="t('common.cancel')"
+          :disabled="confirmDialogLoading"
+          @click="closeConfirmDialog"
+        />
+        <Button
+          severity="danger"
+          :label="t('common.confirm')"
+          :loading="confirmDialogLoading"
+          :disabled="confirmDialogLoading"
+          @click="runConfirmAction"
+        />
       </div>
     </Dialog>
   </div>
@@ -167,6 +221,8 @@ import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import {
+  clearIPGeoFailures,
+  clearSystemNotifications,
   exportIPGeoFailures,
   fetchIPGeoFailures,
   fetchSystemNotifications,
@@ -197,7 +253,13 @@ const failureWebsiteId = ref('');
 const failureReason = ref('');
 const failureKeyword = ref('');
 const failureExporting = ref(false);
+const failureClearing = ref(false);
+const notificationsClearing = ref(false);
 const websites = ref<WebsiteInfo[]>([]);
+const confirmDialogVisible = ref(false);
+const confirmDialogMessage = ref('');
+const confirmDialogLoading = ref(false);
+let confirmAction: (() => Promise<void>) | null = null;
 
 const unreadLabel = computed(() => (unreadCount.value > 99 ? '99+' : `${unreadCount.value}`));
 const websiteOptions = computed(() => [
@@ -361,6 +423,55 @@ const exportFailures = async () => {
   }
 };
 
+const openConfirmDialog = (message: string, action: () => Promise<void>) => {
+  confirmDialogMessage.value = message;
+  confirmDialogVisible.value = true;
+  confirmDialogLoading.value = false;
+  confirmAction = action;
+};
+
+const closeConfirmDialog = () => {
+  if (confirmDialogLoading.value) {
+    return;
+  }
+  confirmDialogVisible.value = false;
+};
+
+const resetConfirmDialogState = () => {
+  confirmDialogMessage.value = '';
+  confirmDialogLoading.value = false;
+  confirmAction = null;
+};
+
+const runConfirmAction = async () => {
+  if (!confirmAction || confirmDialogLoading.value) {
+    return;
+  }
+  confirmDialogLoading.value = true;
+  try {
+    await confirmAction();
+    confirmDialogVisible.value = false;
+  } finally {
+    confirmDialogLoading.value = false;
+    confirmAction = null;
+  }
+};
+
+const clearFailures = async () => {
+  if (failureClearing.value) {
+    return;
+  }
+  openConfirmDialog(t('notifications.clearFailureConfirm'), async () => {
+    failureClearing.value = true;
+    try {
+      await clearIPGeoFailures({});
+      await loadFailures(true);
+    } finally {
+      failureClearing.value = false;
+    }
+  });
+};
+
 const markOneRead = async (notice: SystemNotification) => {
   if (!notice || notice.read_at) {
     return;
@@ -382,6 +493,25 @@ const markAllRead = async () => {
     read_at: notice.read_at || new Date().toISOString(),
   }));
   unreadCount.value = 0;
+};
+
+const clearNotifications = async () => {
+  if (notificationsClearing.value) {
+    return;
+  }
+  openConfirmDialog(t('notifications.clearNotificationsConfirm'), async () => {
+    notificationsClearing.value = true;
+    try {
+      await clearSystemNotifications({ all: true });
+      page.value = 1;
+      notifications.value = [];
+      hasMore.value = false;
+      unreadCount.value = 0;
+      await loadNotifications(true);
+    } finally {
+      notificationsClearing.value = false;
+    }
+  });
 };
 
 onMounted(() => {
@@ -552,11 +682,21 @@ onUnmounted(() => {
   cursor: default;
 }
 
-.system-notice-actions {
+.system-dialog-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-top: 12px;
+}
+
+.system-dialog-actions-left,
+.system-dialog-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .system-notice-action {
@@ -628,5 +768,35 @@ onUnmounted(() => {
 
 .system-failure-time {
   color: var(--muted);
+}
+
+:global(.system-confirm-dialog) {
+  width: 420px;
+  max-width: 92vw;
+}
+
+.system-confirm-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.system-confirm-content i {
+  color: var(--warning-color);
+  font-size: 18px;
+  margin-top: 1px;
+}
+
+.system-confirm-content p {
+  margin: 0;
+}
+
+.system-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
 }
 </style>
